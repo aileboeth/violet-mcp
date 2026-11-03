@@ -35,19 +35,29 @@ object Diagnostics {
         lastRequest = Request(r.path, r.status, System.currentTimeMillis(), r.handleMs, r.toolMs)
     }
 
+    // 1.4.2：每个服务器位置单独记（位置 1 沿用 1.4.x 的键）
+    private fun key(slot: Int, field: String) = if (slot == 1) "relay_$field" else "relay${slot}_$field"
+
     /** 中继状态变化时记录最近一次成功/失败（持久化） */
-    fun recordRelay(context: Context, s: RelayClient.RelayState) {
+    fun recordRelay(context: Context, slot: Int, s: RelayClient.RelayState) {
         val e = prefs(context).edit()
-        if (s.phase == RelayClient.Phase.CONNECTED && s.lastConnectedAt > 0) e.putLong("relay_ok_at", s.lastConnectedAt)
+        if (s.phase == RelayClient.Phase.CONNECTED && s.lastConnectedAt > 0) e.putLong(key(slot, "ok_at"), s.lastConnectedAt)
         if (s.lastFailureAt > 0) {
-            e.putLong("relay_fail_at", s.lastFailureAt).putString("relay_fail_reason", s.lastFailureReason)
+            e.putLong(key(slot, "fail_at"), s.lastFailureAt).putString(key(slot, "fail_reason"), s.lastFailureReason)
         }
         e.apply()
     }
 
-    fun lastRelaySuccessAt(context: Context): Long = prefs(context).getLong("relay_ok_at", 0L)
-    fun lastRelayFailureAt(context: Context): Long = prefs(context).getLong("relay_fail_at", 0L)
-    fun lastRelayFailureReason(context: Context): String = prefs(context).getString("relay_fail_reason", "") ?: ""
+    fun forgetRelay(context: Context, slot: Int) {
+        prefs(context).edit().remove(key(slot, "ok_at")).remove(key(slot, "fail_at")).remove(key(slot, "fail_reason")).apply()
+    }
+
+    fun lastRelaySuccessAt(context: Context, slot: Int): Long = prefs(context).getLong(key(slot, "ok_at"), 0L)
+    fun lastRelayFailureAt(context: Context, slot: Int): Long = prefs(context).getLong(key(slot, "fail_at"), 0L)
+    fun lastRelayFailureReason(context: Context, slot: Int): String = prefs(context).getString(key(slot, "fail_reason"), "") ?: ""
+
+    /** 所有服务器里最近的一次成功连接 */
+    fun lastRelaySuccessAt(context: Context): Long = Settings.RELAY_SLOTS.maxOf { lastRelaySuccessAt(context, it) }
 
     /** 前台服务启动失败（例如 Android 12+ 系统不允许从后台启动） */
     fun recordStartFailure(context: Context, reason: String) {

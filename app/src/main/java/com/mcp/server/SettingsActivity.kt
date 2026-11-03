@@ -128,30 +128,12 @@ fun SettingsScreen(
     var autoStart by remember { mutableStateOf(Settings.autoStart(context)) }
     var logLevel by remember { mutableStateOf(Settings.logLevel(context)) }
 
-    var relayEnabled by remember { mutableStateOf(Settings.relayEnabled(context)) }
-    var relayUrl by remember { mutableStateOf(Settings.relayUrl(context)) }
-    var relaySecret by remember { mutableStateOf(Settings.relaySecret(context)) }
-    var relayPin by remember { mutableStateOf(Settings.relayPin(context)) }
-    var relayError by remember { mutableStateOf<String?>(null) }
-
-    var showAdvanced by remember { mutableStateOf(false) }
-    var connectTimeout by remember { mutableStateOf(Settings.relayConnectTimeoutSec(context).toString()) }
-    var clientPing by remember { mutableStateOf(Settings.relayClientPingSec(context).toString()) }
-    var maxRetry by remember { mutableStateOf(Settings.relayMaxRetrySec(context).toString()) }
-
     val hasUsage = remember(permissionTick) { UsageTools.hasUsageAccess(context) }
     val hasBattery = remember(permissionTick) { isIgnoringBatteryOptimizations(context) }
     val hasNotifications = remember(permissionTick) {
         Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
     }
-
-    fun candidate() = Settings.relayConfig(context, BuildConfig.VERSION_NAME).copy(
-        url = relayUrl.trim(), deviceSecret = relaySecret.trim(), pin = relayPin.trim().ifBlank { null },
-        connectTimeoutSec = connectTimeout.toIntOrNull() ?: -1,
-        clientPingIntervalSec = clientPing.toIntOrNull() ?: -1,
-        maxRetrySec = maxRetry.toIntOrNull() ?: -1,
-    )
 
     Scaffold(
         topBar = {
@@ -174,104 +156,8 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // ===== 远程访问（TLS 中继） =====
-            Card {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("远程访问（TLS 中继）", style = MaterialTheme.typography.titleSmall)
-                    Text("手机主动连接你自己的 VPS 中继，Violet 通过中继访问。只接受 wss://。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(10.dp))
-                    ToggleRow(
-                        icon = Icons.Outlined.Public,
-                        title = "启用中继连接",
-                        subtitle = "断线后自动重连；切换网络时立即重连；没有网络时暂停",
-                        checked = relayEnabled,
-                        onCheckedChange = {
-                            if (it) {
-                                val problem = Settings.relaySecretProblem(context)
-                                    ?: RelayClient.validate(Settings.relayConfig(context, BuildConfig.VERSION_NAME))
-                                if (problem != null) {
-                                    relayError = "请先保存有效的中继配置：$problem"
-                                    return@ToggleRow
-                                }
-                            }
-                            relayEnabled = it
-                            Settings.setRelayEnabled(context, it)
-                            McpServerService.notifyIfRunning(context, McpServerService.ACTION_APPLY)
-                        },
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = relayUrl,
-                        onValueChange = { relayUrl = it; relayError = null },
-                        label = { Text("中继地址") },
-                        placeholder = { Text("wss://relay.example.com:8443/device") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = relaySecret,
-                        onValueChange = { relaySecret = it; relayError = null },
-                        label = { Text("设备密钥（中继 device.secret）") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = relayPin,
-                        onValueChange = { relayPin = it; relayError = null },
-                        label = { Text("证书指纹（自签证书必填，可填 2 个）") },
-                        placeholder = { Text("sha256/…") },
-                        minLines = 1,
-                        maxLines = 3,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                        Text(if (showAdvanced) "收起连接参数" else "连接参数（高级）")
-                    }
-                    if (showAdvanced) {
-                        NumberField("连接超时（秒，5–60）", connectTimeout) { connectTimeout = it; relayError = null }
-                        NumberField("手机侧心跳（秒，0 关闭，15–600）", clientPing) { clientPing = it; relayError = null }
-                        NumberField("最长重连间隔（秒，10–3600）", maxRetry) { maxRetry = it; relayError = null }
-                        Text(
-                            "主要心跳由中继发出（中继的 -ping-interval，默认 30 秒）。手机侧心跳只是兜底，间隔越短越耗电。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    relayError?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = {
-                        val c = candidate()
-                        val problem = RelayClient.validate(c) ?: if (c.maxRetrySec !in 10..3600) "最长重连间隔应在 10–3600 秒" else null
-                        if (problem != null) {
-                            relayError = problem
-                            return@TextButton
-                        }
-                        try {
-                            Settings.saveRelay(context, relayUrl, relaySecret, relayPin)
-                        } catch (e: com.mcp.server.server.SecretStorageUnavailableException) {
-                            relayError = "无法安全保存设备密钥：${e.message}。可在“安全”页了解兼容模式。"
-                            return@TextButton
-                        }
-                        Settings.setRelayTiming(context, c.connectTimeoutSec, c.clientPingIntervalSec, c.maxRetrySec)
-                        McpServerService.notifyIfRunning(context, McpServerService.ACTION_APPLY)
-                        toast(context, if (McpServerService.running) "已保存并重新连接" else "已保存，启动服务后生效")
-                    }) { Text("保存并应用") }
-                    Text(
-                        "正式证书（如 Let's Encrypt）可不填指纹；中继自动生成的自签证书需要填写中继启动日志里的 certificate pin。" +
-                            "更换证书时可先把新证书的指纹作为第二行加进来，换完后再删掉旧的。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            // ===== 远程访问（TLS 中继，1.5.0：最多 3 个服务器） =====
+            RelayServersCard()
 
             // ===== 应用更新（1.4.0） =====
             UpdateCard(canInstall = remember(permissionTick) { AppUpdater.canInstall(context) })
@@ -437,7 +323,7 @@ private fun formatClock(ms: Long): String =
     java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ms))
 
 @Composable
-private fun NumberField(label: String, value: String, onChange: (String) -> Unit) {
+internal fun NumberField(label: String, value: String, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { v -> onChange(v.filter { it.isDigit() }.take(4)) },

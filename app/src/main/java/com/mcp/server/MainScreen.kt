@@ -90,9 +90,9 @@ import java.util.Locale
 
 private data class StatusInfo(
     val service: ServiceStatus.Info? = null,
-    val relayEnabled: Boolean = false,
-    val relayHost: String = "",
-    val relayState: RelayClient.RelayState? = null,
+    /** 1.4.2：每个服务器一行 */
+    val servers: List<Settings.RelaySlot> = emptyList(),
+    val relayStates: Map<Int, RelayClient.RelayState> = emptyMap(),
     val lastRelaySuccessAt: Long = 0L,
     val lastToolCall: Diagnostics.ToolCall? = null,
     val enabledTools: Int = 0,
@@ -127,9 +127,8 @@ fun MainScreen(
             if (round++ % 5 == 0) storage = Settings.credentialStorage(context)
             status = StatusInfo(
                 service = ServiceStatus.evaluate(context),
-                relayEnabled = Settings.relayEnabled(context),
-                relayHost = try { java.net.URI(Settings.relayUrl(context)).host ?: "" } catch (_: Exception) { "" },
-                relayState = McpServerService.relayState,
+                servers = Settings.relaySlots(context),
+                relayStates = McpServerService.relayStates(),
                 lastRelaySuccessAt = Diagnostics.lastRelaySuccessAt(context),
                 lastToolCall = Diagnostics.lastToolCall,
                 enabledTools = ToolKit.enabledCount(),
@@ -339,8 +338,22 @@ private fun HomeTab(
                     Text("远程访问", style = MaterialTheme.typography.titleSmall)
                 }
                 Spacer(Modifier.height(10.dp))
-                val (text, color) = relayText(status, running)
-                Text(text, style = MaterialTheme.typography.bodyMedium, color = color)
+                if (status.servers.isEmpty()) {
+                    Text("未开启（在“设置”里添加服务器）", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                // 1.4.2：每个服务器一行：彩色小圆点 + 名字 + 状态
+                for (srv in status.servers) {
+                    val (text, color) = relayText(srv, status.relayStates[srv.slot], running)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
+                        Box(modifier = Modifier.size(8.dp).background(color = color, shape = CircleShape))
+                        Spacer(Modifier.width(10.dp))
+                        Text(srv.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.width(8.dp))
+                        Text(text, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 InfoLine("最近一次成功连接", formatTime(status.lastRelaySuccessAt))
                 val call = status.lastToolCall
@@ -391,15 +404,14 @@ private fun HomeTab(
 }
 
 @Composable
-private fun relayText(status: StatusInfo, running: Boolean): Pair<String, Color> {
-    val r = status.relayState
+internal fun relayText(srv: Settings.RelaySlot, r: RelayClient.RelayState?, running: Boolean): Pair<String, Color> {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     return when {
-        !status.relayEnabled -> "未开启（在“设置”中填写中继地址后开启）" to muted
-        !running -> "服务未运行，没有连接" to muted
+        !srv.enabled -> "已关闭" to muted
+        !running -> "服务未运行" to muted
         r == null -> "未启动" to muted
-        r.phase == RelayClient.Phase.CONNECTED -> "已连接 ${status.relayHost}" to Color(0xFF2E7D32)
-        r.phase == RelayClient.Phase.CONNECTING -> "正在连接 ${status.relayHost}" to Color(0xFFF9A825)
+        r.phase == RelayClient.Phase.CONNECTED -> "已连接 ${srv.host}" to Color(0xFF2E7D32)
+        r.phase == RelayClient.Phase.CONNECTING -> "正在连接 ${srv.host}" to Color(0xFFF9A825)
         r.phase == RelayClient.Phase.WAITING_NETWORK -> "等待网络恢复" to Color(0xFFF9A825)
         r.phase == RelayClient.Phase.REJECTED || r.phase == RelayClient.Phase.REPLACED -> {
             val retry = if (r.nextRetryAt > 0) "，${secondsUntil(r.nextRetryAt)} 秒后再试" else ""

@@ -64,7 +64,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     }
     // 每秒重新读取一次
     val status = remember(tick) { ServiceStatus.evaluate(context) }
-    val relay = remember(tick) { McpServerService.relayState }
+    val relays = remember(tick) { McpServerService.relayStates() }
     val req = remember(tick) { Diagnostics.lastRequest }
     val call = remember(tick) { Diagnostics.lastToolCall }
 
@@ -102,18 +102,27 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            Section("中继连接") {
-                InfoLine("开关", if (Settings.relayEnabled(context)) "已开启" else "已关闭")
-                InfoLine("当前状态", relay?.let { "${phaseName(it.phase)} · ${it.message}" } ?: "未运行")
-                if (relay != null && relay.connectedSince > 0) InfoLine("本次连接开始", formatTime(relay.connectedSince))
-                if (relay != null && relay.nextRetryAt > 0) InfoLine("下次重连", "${secondsUntil(relay.nextRetryAt)} 秒后")
-                InfoLine("累计重连", "${relay?.reconnects ?: 0} 次")
-                InfoLine("最近一次成功连接", formatTime(Diagnostics.lastRelaySuccessAt(context)))
-                InfoLine("最近一次失败", Diagnostics.lastRelayFailureAt(context).let {
-                    if (it > 0) formatTime(it) else "无"
-                })
-                val reason = Diagnostics.lastRelayFailureReason(context)
-                if (reason.isNotEmpty()) InfoLine("失败原因", reason)
+            // 1.4.2：每个服务器一节
+            val servers = remember(tick) { Settings.relaySlots(context) }
+            if (servers.isEmpty()) {
+                Section("中继连接") { InfoLine("服务器", "还没有添加（在“设置”里添加）") }
+            }
+            for (srv in servers) {
+                val relay = relays[srv.slot]
+                Section("中继：${srv.name}") {
+                    InfoLine("地址", srv.host.ifEmpty { "—" })
+                    InfoLine("开关", if (srv.enabled) "已开启" else "已关闭")
+                    InfoLine("当前状态", relay?.let { "${phaseName(it.phase)} · ${it.message}" } ?: "未运行")
+                    if (relay != null && relay.connectedSince > 0) InfoLine("本次连接开始", formatTime(relay.connectedSince))
+                    if (relay != null && relay.nextRetryAt > 0) InfoLine("下次重连", "${secondsUntil(relay.nextRetryAt)} 秒后")
+                    InfoLine("累计重连", "${relay?.reconnects ?: 0} 次")
+                    InfoLine("最近一次成功连接", formatTime(Diagnostics.lastRelaySuccessAt(context, srv.slot)))
+                    InfoLine("最近一次失败", Diagnostics.lastRelayFailureAt(context, srv.slot).let {
+                        if (it > 0) formatTime(it) else "无"
+                    })
+                    val reason = Diagnostics.lastRelayFailureReason(context, srv.slot)
+                    if (reason.isNotEmpty()) InfoLine("失败原因", reason)
+                }
             }
 
             Section("最近一次请求") {

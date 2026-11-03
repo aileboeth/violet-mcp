@@ -20,8 +20,8 @@ object Settings {
     @Volatile
     private var cachedToken: String? = null
 
-    @Volatile
-    private var cachedRelaySecret: String? = null
+    /** 每个服务器位置的设备密钥（解密后的内存缓存） */
+    private val cachedRelaySecrets = java.util.concurrent.ConcurrentHashMap<Int, String>()
 
     /** 仅测试可替换：Robolectric 没有 AndroidKeyStore */
     @Volatile
@@ -52,13 +52,15 @@ object Settings {
             } else {
                 prefs(context).edit().putBoolean("plaintext_consent", false).commit()
                 val st = secretStore(context)
-                if (st.mode(KEY_RELAY_SECRET) == SecretStore.Mode.PLAINTEXT_FALLBACK) {
-                    prefs(context).edit().putBoolean("relay_enabled", false).commit()
+                for (s in RELAY_SLOTS) {
+                    if (st.mode(secretKey(s)) == SecretStore.Mode.PLAINTEXT_FALLBACK) {
+                        prefs(context).edit().putBoolean(key(s, "enabled"), false).commit()
+                    }
                 }
-                st.deletePlaintext(KEY_TOKEN, KEY_RELAY_SECRET)
+                st.deletePlaintext(KEY_TOKEN, *allSecretKeys)
             }
             cachedToken = null
-            cachedRelaySecret = null
+            cachedRelaySecrets.clear()
         }
     }
 
@@ -76,7 +78,7 @@ object Settings {
 
     fun credentialStorage(context: Context): CredentialStorage {
         val st = secretStore(context)
-        val reads = listOf(st.read(KEY_TOKEN), st.read(KEY_RELAY_SECRET))
+        val reads = listOf(st.read(KEY_TOKEN)) + allSecretKeys.map { st.read(it) }
         return when {
             reads.any { it is SecretStore.Read.Unreadable } -> CredentialStorage.UNREADABLE
             reads.any { it is SecretStore.Read.NeedsConsent } -> CredentialStorage.NEEDS_CONSENT
@@ -194,72 +196,138 @@ object Settings {
 
     fun tokenStorageMode(context: Context): SecretStore.Mode? = secretStore(context).mode(KEY_TOKEN)
 
-    // ==================== 安全中继 ====================
+    // ==================== 安全中继（1.4.2：最多 3 个服务器） ====================
+    //
+    // 每个服务器占一个固定的位置 1..3。位置 1 沿用 1.4.x 的键（relay_enabled / relay_url / relay_pin / relay_secret），
+    // 升级后原来的配置就是“服务器 1”，设备密钥不用迁移、不用重填；位置 2、3 用 relay2_* / relay3_* 和
+    // relay_secret_2 / relay_secret_3。连接参数（超时、心跳、重连间隔）所有服务器共用。
 
-    fun relayEnabled(context: Context): Boolean = prefs(context).getBoolean("relay_enabled", false)
+    const val MAX_RELAYS = 3
+    val RELAY_SLOTS = 1..MAX_RELAYS
 
-    fun setRelayEnabled(context: Context, on: Boolean) {
-        prefs(context).edit().putBoolean("relay_enabled", on).apply()
+    /** 一个服务器的配置（不含设备密钥） */
+    data class RelaySlot(val slot: Int, val name: String, val url: String, val pin: String, val enabled: Boolean) {
+        val host: String get() = try { java.net.URI(url).host ?: "" } catch (_: Exception) { "" }
     }
 
-    fun relayUrl(context: Context): String = prefs(context).getString("relay_url", "") ?: ""
+    private fun key(slot: Int, field: String) = if (slot == 1) "relay_$field" else "relay${slot}_$field"
+    private fun secretKey(slot: Int) = if (slot == 1) KEY_RELAY_SECRET else "relay_secret_$slot"
+    private val allSecretKeys: Array<String> get() = RELAY_SLOTS.map { secretKey(it) }.toTypedArray()
+
+    fun defaultRelayName(slot: Int) = if (slot == 1) "我的服务器" else "服务器 $slot"
+
+    /** 这个位置有没有服务器（位置 1：1.4.x 填过地址或密钥也算） */
+    fun relaySlotExists(context: Context, slot: Int): Boolean {
+        val p = prefs(context)
+        if (p.getBoolean(key(slot, "added"), false)) return true
+        return slot == 1 && (relayUrl(context, 1).isNotBlank() || secretStore(context).mode(secretKey(1)) != null)
+    }
+
+    fun relaySlots(context: Context): List<RelaySlot> = RELAY_SLOTS.filter { relaySlotExists(context, it) }.map {
+        RelaySlot(it, relayName(context, it), relayUrl(context, it), relayPin(context, it), relayEnabled(context, it))
+    }
+
+    /** 还空着的最小位置；3 个都用了时为 null */
+    fun freeRelaySlot(context: Context): Int? = RELAY_SLOTS.firstOrNull { !relaySlotExists(context, it) }
+
+    fun relayName(context: Context, slot: Int): String =
+        prefs(context).getString(key(slot, "name"), null)?.takeIf { it.isNotBlank() } ?: defaultRelayName(slot)
+
+    fun relayEnabled(context: Context, slot: Int = 1): Boolean = prefs(context).getBoolean(key(slot, "enabled"), false)
+
+    /** 至少开着一个服务器 */
+    fun anyRelayEnabled(context: Context): Boolean = RELAY_SLOTS.any { relaySlotExists(context, it) && relayEnabled(context, it) }
+
+    fun setRelayEnabled(context: Context, on: Boolean) = setRelayEnabled(context, 1, on)
+
+    fun setRelayEnabled(context: Context, slot: Int, on: Boolean) {
+        prefs(context).edit().putBoolean(key(slot, "enabled"), on).apply()
+    }
+
+    fun relayUrl(context: Context, slot: Int = 1): String = prefs(context).getString(key(slot, "url"), "") ?: ""
 
     /** 一个或多个证书指纹（换行或逗号分隔） */
-    fun relayPin(context: Context): String = prefs(context).getString("relay_pin", "") ?: ""
+    fun relayPin(context: Context, slot: Int = 1): String = prefs(context).getString(key(slot, "pin"), "") ?: ""
 
-    fun relaySecret(context: Context): String {
-        cachedRelaySecret?.let { return it }
+    fun relaySecret(context: Context, slot: Int = 1): String {
+        cachedRelaySecrets[slot]?.let { return it }
         synchronized(this) {
-            cachedRelaySecret?.let { return it }
-            return when (val r = secretStore(context).read(KEY_RELAY_SECRET)) {
-                is SecretStore.Read.Value -> r.value.also { cachedRelaySecret = it }
+            cachedRelaySecrets[slot]?.let { return it }
+            return when (val r = secretStore(context).read(secretKey(slot))) {
+                is SecretStore.Read.Value -> r.value.also { cachedRelaySecrets[slot] = it }
                 else -> ""
             }
         }
     }
 
     /** 设备密钥不可用的原因；未保存或可用时返回 null */
-    fun relaySecretProblem(context: Context): String? = when (val r = secretStore(context).read(KEY_RELAY_SECRET)) {
+    fun relaySecretProblem(context: Context, slot: Int = 1): String? = when (val r = secretStore(context).read(secretKey(slot))) {
         is SecretStore.Read.Unreadable -> r.reason
         is SecretStore.Read.NeedsConsent -> r.reason
         else -> null
     }
 
-    fun relaySecretStorageMode(context: Context): SecretStore.Mode? = secretStore(context).mode(KEY_RELAY_SECRET)
+    fun relaySecretStorageMode(context: Context, slot: Int = 1): SecretStore.Mode? = secretStore(context).mode(secretKey(slot))
 
-    /** 保存中继配置。凭据存储不可用时抛出 [SecretStorageUnavailableException]，此时什么都不保存 */
-    fun saveRelay(context: Context, url: String, secret: String, pin: String) {
+    /** 保存服务器 1 的中继配置（1.4.x 的接口） */
+    fun saveRelay(context: Context, url: String, secret: String, pin: String) =
+        saveRelay(context, 1, relayName(context, 1), url, secret, pin)
+
+    /** 保存一个服务器的配置。凭据存储不可用时抛出 [SecretStorageUnavailableException]，此时什么都不保存 */
+    fun saveRelay(context: Context, slot: Int, name: String, url: String, secret: String, pin: String) {
+        require(slot in RELAY_SLOTS) { "slot $slot" }
         synchronized(this) {
-            cachedRelaySecret = null
-            if (secret.isBlank()) secretStore(context).delete(KEY_RELAY_SECRET)
-            else secretStore(context).write(KEY_RELAY_SECRET, secret.trim())
+            cachedRelaySecrets.remove(slot)
+            if (secret.isBlank()) secretStore(context).delete(secretKey(slot))
+            else secretStore(context).write(secretKey(slot), secret.trim())
         }
         prefs(context).edit()
-            .putString("relay_url", url.trim())
-            .putString("relay_pin", pin.trim())
+            .putBoolean(key(slot, "added"), true)
+            .putString(key(slot, "name"), name.trim().take(24))
+            .putString(key(slot, "url"), url.trim())
+            .putString(key(slot, "pin"), pin.trim())
             .apply()
     }
 
-    /** 撤销远程凭据：删除设备密钥和证书指纹，关闭中继（中继地址保留，方便重新配置） */
-    fun revokeRelayCredentials(context: Context) {
-        prefs(context).edit().putBoolean("relay_enabled", false).remove("relay_pin").commit()
+    /** 删除一个服务器：地址、名字、指纹、开关和设备密钥都删掉，位置空出来 */
+    fun deleteRelay(context: Context, slot: Int) {
+        prefs(context).edit().putBoolean(key(slot, "enabled"), false)
+            .remove(key(slot, "added")).remove(key(slot, "name")).remove(key(slot, "url")).remove(key(slot, "pin"))
+            .commit()
         synchronized(this) {
-            secretStore(context).delete(KEY_RELAY_SECRET)
-            cachedRelaySecret = null
+            secretStore(context).delete(secretKey(slot))
+            cachedRelaySecrets.remove(slot)
+        }
+        Diagnostics.forgetRelay(context, slot)
+    }
+
+    /** 撤销远程凭据：所有服务器的设备密钥和证书指纹都删除并关闭（地址和名字保留，方便重新配置） */
+    fun revokeRelayCredentials(context: Context) {
+        val e = prefs(context).edit()
+        for (s in RELAY_SLOTS) e.putBoolean(key(s, "enabled"), false).remove(key(s, "pin"))
+        e.commit()
+        synchronized(this) {
+            for (s in RELAY_SLOTS) secretStore(context).delete(secretKey(s))
+            cachedRelaySecrets.clear()
         }
     }
 
-    /** 清除本地全部认证配置：中继配置全部删除，并生成新的 MCP 令牌（旧令牌立即失效） */
+    /** 清除本地全部认证配置：所有服务器的中继配置全部删除，并生成新的 MCP 令牌（旧令牌立即失效） */
     fun clearAllCredentials(context: Context) {
-        prefs(context).edit().putBoolean("relay_enabled", false)
-            .remove("relay_pin").remove("relay_url").commit()
+        val e = prefs(context).edit()
+        for (s in RELAY_SLOTS) {
+            e.putBoolean(key(s, "enabled"), false).remove(key(s, "added")).remove(key(s, "name"))
+                .remove(key(s, "url")).remove(key(s, "pin"))
+        }
+        e.commit()
         synchronized(this) {
-            secretStore(context).delete(KEY_RELAY_SECRET)
-            cachedRelaySecret = null
+            for (s in RELAY_SLOTS) secretStore(context).delete(secretKey(s))
+            cachedRelaySecrets.clear()
             secretStore(context).delete(KEY_TOKEN)
             cachedToken = null
             tryRegenerateLocked(context)
         }
+        for (s in RELAY_SLOTS) Diagnostics.forgetRelay(context, s)
     }
 
     /** 中继连接参数（高级） */
@@ -275,10 +343,10 @@ object Settings {
             .apply()
     }
 
-    fun relayConfig(context: Context, appVersion: String): RelayConfig = RelayConfig(
-        url = relayUrl(context),
-        deviceSecret = relaySecret(context),
-        pin = relayPin(context).ifBlank { null },
+    fun relayConfig(context: Context, appVersion: String, slot: Int = 1): RelayConfig = RelayConfig(
+        url = relayUrl(context, slot),
+        deviceSecret = relaySecret(context, slot),
+        pin = relayPin(context, slot).ifBlank { null },
         deviceName = "android",
         appVersion = appVersion,
         connectTimeoutSec = relayConnectTimeoutSec(context),
@@ -288,7 +356,7 @@ object Settings {
 
     /** 当前生效的全部密钥（供日志脱敏；读的是内存缓存） */
     fun secrets(context: Context): List<String> =
-        listOfNotNull(cachedToken, cachedRelaySecret).filter { it.isNotEmpty() }
+        (listOfNotNull(cachedToken) + cachedRelaySecrets.values).filter { it.isNotEmpty() }
 
     internal fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -298,7 +366,7 @@ object Settings {
         cipherFactory = { KeystoreCipher.createOrNull() }
         store = null
         cachedToken = null
-        cachedRelaySecret = null
+        cachedRelaySecrets.clear()
     }
 }
 

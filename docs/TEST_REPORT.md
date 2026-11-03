@@ -1,5 +1,22 @@
 # 测试报告
 
+## Violet MCP 1.4.2（中继 1.2.0 不变）— 2026-11-03
+
+同时连最多 3 个中继服务器（用户选上限 3、设置页“服务器卡片列表”）：每个开着的位置一个 `RelayClient`，共用同一个
+`McpEndpoint` 和访问令牌；位置 1 沿用 1.4.x 的键，升级后原配置就是“服务器 1”，设备密钥不迁移；改一个服务器只重建那一条
+连接。设置页新卡片 `RelayServersCard.kt`；主页、诊断、安全页按服务器分行；`health` 不透露其他服务器的地址。工具、
+鉴权、中继协议没有变化。
+
+| 测试 | 结果 |
+|---|---|
+| mcp-core + Robolectric（`:mcp-core:test :app:testDebugUnitTest --offline`，**模拟**） | 通过，131/131（73 + 58；新增 `MultiRelayTest` 5 项：1.4.x 配置成为服务器 1、三个服务器各自的密钥、开关互不影响、删除一个不动其他、撤销 / 清除覆盖所有服务器） |
+| 界面截图（Robolectric 原生绘图，**模拟**，临时测试未留在仓库） | 看过：折叠、展开编辑、深色、两个服务器 + “添加服务器” |
+| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.2-{debug,release}.apk`，versionCode 9 |
+| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项 |
+| 签名（`tools/sign_release.py`，用户“可以继续吧”） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.4.1 相同），Android 8.x 为旧证书，lineage 旧 → 新 |
+| 发布包（`tools/package_release.py --version 1.4.2 --relay-version 1.2.0`） | 通过：`dist/v1.4.2/`，发布产物和交接包扫描问题 0 个 |
+| 真机（多条中继同时在线、断网 / 切网时各自重连、耗电） | 无法验证（没有设备） |
+
 ## Violet MCP 1.4.1（中继 1.2.0 不变）— 2026-11-03
 
 新增 7 个只读“生活状态”工具（`next_alarm`、`now_playing`、`audio_output`、`network_state`、`step_count`、

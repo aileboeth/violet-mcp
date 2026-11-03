@@ -69,10 +69,10 @@ fun SecurityScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
-    var relayState by remember { mutableStateOf(McpServerService.relayState) }
+    var relayStates by remember { mutableStateOf(McpServerService.relayStates()) }
     LaunchedEffect(Unit) {
         while (true) {
-            relayState = McpServerService.relayState
+            relayStates = McpServerService.relayStates()
             delay(1000)
         }
     }
@@ -80,10 +80,9 @@ fun SecurityScreen(onBack: () -> Unit) {
     val token = remember(tick) { Settings.token(context) }
     val tokenProblem = remember(tick) { Settings.tokenProblem(context) }
     val tokenMode = remember(tick) { Settings.tokenStorageMode(context) }
-    val secretMode = remember(tick) { Settings.relaySecretStorageMode(context) }
     val storeError = remember(tick) { Settings.secretStore(context).lastError }
-    val pins = remember(tick) { Settings.relayPin(context).split(Regex("[,\\s]+")).filter { it.isNotBlank() } }
-    val relayEnabled = remember(tick) { Settings.relayEnabled(context) }
+    val servers = remember(tick) { Settings.relaySlots(context) }
+    val relayEnabled = remember(tick) { Settings.anyRelayEnabled(context) }
     val storage = remember(tick) { Settings.credentialStorage(context) }
     var compatAck by remember { mutableStateOf(false) }
 
@@ -183,18 +182,23 @@ fun SecurityScreen(onBack: () -> Unit) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("远程连接", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(6.dp))
-                    InfoLine("中继连接", if (relayEnabled) "已开启" else "已关闭")
-                    InfoLine("设备密钥", when (secretMode) {
-                        SecretStore.Mode.ENCRYPTED -> "已保存（加密）"
-                        SecretStore.Mode.PLAINTEXT_FALLBACK -> "已保存（兼容模式，未加密）"
-                        null -> "未保存"
-                    })
+                    if (servers.isEmpty()) InfoLine("服务器", "还没有添加")
+                    for (srv in servers) {
+                        // 1.4.2：每个服务器一行：开没开、设备密钥怎么存的
+                        val mode = Settings.relaySecretStorageMode(context, srv.slot)
+                        InfoLine(srv.name, (if (srv.enabled) "已开启" else "已关闭") + " · " + when (mode) {
+                            SecretStore.Mode.ENCRYPTED -> "密钥已加密保存"
+                            SecretStore.Mode.PLAINTEXT_FALLBACK -> "密钥未加密（兼容模式）"
+                            null -> "没有密钥"
+                        })
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { confirm = Confirm.DISCONNECT }, enabled = relayEnabled) { Text("断开远程连接") }
                         OutlinedButton(onClick = { confirm = Confirm.REVOKE }) { Text("撤销远程凭据") }
                     }
-                    Text("“断开”只是暂时关闭中继，配置保留；“撤销”会删除手机上的设备密钥和证书指纹。" +
+                    Text("这两个按钮对所有服务器生效；只想关掉一个，在“设置”里关它的开关。" +
+                        "“断开”只是暂时关闭中继，配置保留；“撤销”会删除手机上的设备密钥和证书指纹。" +
                         "怀疑设备密钥泄露时，还要在 VPS 上更换 device.secret（见部署说明）。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -204,7 +208,16 @@ fun SecurityScreen(onBack: () -> Unit) {
             Card {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("中继证书指纹", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
+                    if (servers.isEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("还没有添加服务器。", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    for (srv in servers) {
+                    val relayState = relayStates[srv.slot]
+                    val pins = srv.pin.split(Regex("[,\\s]+")).filter { it.isNotBlank() }
+                    Spacer(Modifier.height(8.dp))
+                    if (servers.size > 1) Text(srv.name, style = MaterialTheme.typography.labelLarge)
                     if (pins.isEmpty()) {
                         Text("未设置：按系统证书颁发机构校验中继证书（适用于正式证书）。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -234,6 +247,7 @@ fun SecurityScreen(onBack: () -> Unit) {
                     } else if (relayState?.phase == RelayClient.Phase.CONNECTED) {
                         Text("当前连接的证书与指纹一致", style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32))
                     }
+                    }
                 }
             }
 
@@ -256,8 +270,8 @@ fun SecurityScreen(onBack: () -> Unit) {
     confirm?.let { c ->
         val (title, body) = when (c) {
             Confirm.ROTATE -> "更换访问令牌？" to "旧令牌立即失效，Violet 需要改用新令牌。"
-            Confirm.DISCONNECT -> "断开远程连接？" to "Violet 将无法访问手机，直到你重新开启中继。"
-            Confirm.REVOKE -> "撤销远程凭据？" to "将删除手机上的设备密钥和证书指纹并关闭中继。重新连接需要再次填写。"
+            Confirm.DISCONNECT -> "断开所有远程连接？" to "所有服务器上的 Violet 都将无法访问手机，直到你在“设置”里重新打开。"
+            Confirm.REVOKE -> "撤销所有远程凭据？" to "将删除手机上所有服务器的设备密钥和证书指纹并关闭中继。重新连接需要再次填写。"
             Confirm.CLEAR_ALL -> "清除全部认证配置？" to "中继配置会被删除，访问令牌会更换。此操作不能撤销。"
             Confirm.ENABLE_COMPAT -> "开启兼容模式（不加密）？" to
                 "本机 Android Keystore 不可用，开启后访问令牌和设备密钥将以明文保存在本应用的私有目录中（不进入备份）。" +
@@ -306,7 +320,7 @@ fun SecurityScreen(onBack: () -> Unit) {
                             toast(context, "已关闭兼容模式，明文凭据已删除")
                         }
                         Confirm.DISCONNECT -> {
-                            Settings.setRelayEnabled(context, false)
+                            for (s in Settings.RELAY_SLOTS) Settings.setRelayEnabled(context, s, false)
                             applyAndRefresh(McpServerService.ACTION_APPLY)
                         }
                         Confirm.REVOKE -> {

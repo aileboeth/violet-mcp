@@ -32,7 +32,8 @@ object MetaTools {
             put("service", status.state.name.lowercase())
             put("uptimeSeconds", McpServerService.uptimeSeconds())
             put("relay", JSONObject()
-                .put("enabled", Settings.relayEnabled(ctx))
+                // 1.4.2：几个服务器里有没有开着的 / 最好的那个状态；不告诉任何一个服务器其他服务器的地址
+                .put("enabled", Settings.anyRelayEnabled(ctx))
                 .put("phase", relay?.phase?.name?.lowercase() ?: "stopped")
                 .put("connectedSince", relay?.connectedSince?.takeIf { it > 0 }?.let { TimeFmt.iso(it) } ?: JSONObject.NULL)
                 .put("lastSuccessAt", Diagnostics.lastRelaySuccessAt(ctx).takeIf { it > 0 }?.let { TimeFmt.iso(it) } ?: JSONObject.NULL)

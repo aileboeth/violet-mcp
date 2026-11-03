@@ -55,12 +55,23 @@ class McpServerService : Service() {
         @Volatile
         private var localServer: LocalHttpServer? = null
 
-        @Volatile
-        private var relay: RelayClient? = null
+        /** 1.4.2：每个开着的服务器位置一条中继连接（最多 [Settings.MAX_RELAYS] 条），共用同一个 MCP 端点 */
+        private val relays = java.util.concurrent.ConcurrentHashMap<Int, RelayClient>()
+        private val relayConfigs = java.util.concurrent.ConcurrentHashMap<Int, com.mcp.server.core.RelayConfig>()
+        private val relayStateMap = java.util.concurrent.ConcurrentHashMap<Int, RelayClient.RelayState>()
 
-        @Volatile
-        var relayState: RelayClient.RelayState? = null
-            private set
+        /** 每个服务器位置的当前状态（没开或服务没运行的位置不在里面） */
+        fun relayStates(): Map<Int, RelayClient.RelayState> = HashMap(relayStateMap)
+
+        /** 所有连接里“最好”的那个状态（有一个连上就是已连接），给只关心有没有远程连接的地方用 */
+        val relayState: RelayClient.RelayState?
+            get() = relayStateMap.values.minByOrNull { PHASE_ORDER.indexOf(it.phase).let { i -> if (i < 0) 99 else i } }
+
+        private val PHASE_ORDER = listOf(
+            RelayClient.Phase.CONNECTED, RelayClient.Phase.CONNECTING, RelayClient.Phase.WAITING_RETRY,
+            RelayClient.Phase.WAITING_NETWORK, RelayClient.Phase.REJECTED, RelayClient.Phase.REPLACED,
+            RelayClient.Phase.STOPPED,
+        )
 
         @Volatile
         private var startedAt: Long = 0L
@@ -119,7 +130,7 @@ class McpServerService : Service() {
             }
             ACTION_TOKEN_CHANGED -> {
                 if (!running) return stopIdle()
-                relay?.reconnectNow("令牌已更新")
+                relays.values.forEach { it.reconnectNow("令牌已更新") }
             }
             else -> {
                 // ACTION_START / ACTION_RESTORE / 系统粘性重启（intent 为 null）
@@ -219,9 +230,7 @@ class McpServerService : Service() {
         PhoneEvents.stop(this)
         AppUpdater.stopPeriodic()
         unregisterNetworkCallback()
-        relay?.stop()
-        relay = null
-        relayState = null
+        stopAllRelays()
         localServer?.stop()
         localServer = null
         endpoint = null
@@ -238,39 +247,62 @@ class McpServerService : Service() {
         localServer = LocalHttpServer(ep, "127.0.0.1", Settings.port(this), LogStore).also { it.start() }
     }
 
+    private fun stopAllRelays() {
+        relays.values.forEach { it.stop() } // 不阻塞
+        relays.clear()
+        relayConfigs.clear()
+        relayStateMap.clear()
+    }
+
+    /**
+     * 按设置应用每个服务器位置：关掉的、删掉的停止；新开的启动；配置变了的重建；没变的保持连接不动
+     * （改服务器 2 时服务器 1 不会断一下）。
+     */
     private fun restartRelay() {
         val ep = endpoint ?: return
-        relay?.stop() // 不阻塞
-        relay = null
-        relayState = null
-        if (!Settings.relayEnabled(this)) return
-        val cfg = Settings.relayConfig(this, BuildConfig.VERSION_NAME)
-        val problem = Settings.relaySecretProblem(this) ?: RelayClient.validate(cfg)
-        if (problem != null) {
-            LogStore.error("中继配置无效：$problem")
-            relayState = RelayClient.RelayState(RelayClient.Phase.REJECTED, problem)
-            return
+        for (slot in Settings.RELAY_SLOTS) {
+            val wanted = Settings.relaySlotExists(this, slot) && Settings.relayEnabled(this, slot)
+            val cfg = if (wanted) Settings.relayConfig(this, BuildConfig.VERSION_NAME, slot) else null
+            if (cfg != null && relays[slot] != null && relayConfigs[slot] == cfg) continue
+            relays.remove(slot)?.stop()
+            relayConfigs.remove(slot)
+            relayStateMap.remove(slot)
+            if (cfg == null) continue
+            val name = Settings.relayName(this, slot)
+            val problem = Settings.relaySecretProblem(this, slot) ?: RelayClient.validate(cfg)
+            if (problem != null) {
+                LogStore.error("“$name”的中继配置无效：$problem")
+                relayStateMap[slot] = RelayClient.RelayState(RelayClient.Phase.REJECTED, problem)
+                continue
+            }
+            val app = applicationContext
+            val self = arrayOfNulls<RelayClient>(1)
+            val client = RelayClient(
+                config = cfg,
+                endpoint = ep,
+                mcpTokenProvider = { Settings.token(app) },
+                log = LogStore,
+                onState = { s ->
+                    // 已经被替换或停掉的旧连接晚到的状态（比如“已停止”）不再写回
+                    if (relays[slot] === self[0]) {
+                        val phaseChanged = relayStateMap[slot]?.phase != s.phase
+                        relayStateMap[slot] = s
+                        if (phaseChanged) {
+                            Diagnostics.recordRelay(app, slot, s)
+                            refreshNotification()
+                        }
+                    }
+                },
+                clock = { SystemClock.elapsedRealtime() }, // 包含深度睡眠时间
+                workGuard = { block -> WakeLockHelper.withRequestWakeLock(app) { block() } },
+            )
+            self[0] = client
+            relayConfigs[slot] = cfg
+            relays[slot] = client
+            client.setNetworkAvailable(hasNetwork())
+            client.start()
         }
-        val app = applicationContext
-        relay = RelayClient(
-            config = cfg,
-            endpoint = ep,
-            mcpTokenProvider = { Settings.token(app) },
-            log = LogStore,
-            onState = { s ->
-                val phaseChanged = relayState?.phase != s.phase
-                relayState = s
-                if (phaseChanged) {
-                    Diagnostics.recordRelay(app, s)
-                    refreshNotification()
-                }
-            },
-            clock = { SystemClock.elapsedRealtime() }, // 包含深度睡眠时间
-            workGuard = { block -> WakeLockHelper.withRequestWakeLock(app) { block() } },
-        ).also {
-            it.setNetworkAvailable(hasNetwork())
-            it.start()
-        }
+        refreshNotification()
     }
 
     // ==================== 网络 ====================
@@ -291,10 +323,10 @@ class McpServerService : Service() {
                 val changed = current != null && network != current
                 val wasDown = current == null
                 current = network
-                relay?.setNetworkAvailable(true)
+                relays.values.forEach { it.setNetworkAvailable(true) }
                 if (changed) {
                     LogStore.info("默认网络已切换")
-                    relay?.reconnectNow("网络切换")
+                    relays.values.forEach { it.reconnectNow("网络切换") }
                 } else if (wasDown) {
                     LogStore.debug("默认网络可用")
                 }
@@ -306,7 +338,7 @@ class McpServerService : Service() {
                     current = null
                     if (cm.activeNetwork == null) {
                         LogStore.warn("网络已断开，暂停重连")
-                        relay?.setNetworkAvailable(false)
+                        relays.values.forEach { it.setNetworkAvailable(false) }
                     }
                 }
                 placeCheck()
@@ -346,8 +378,11 @@ class McpServerService : Service() {
 
     private fun notificationText(): String {
         val r = relayState
+        val on = Settings.relaySlots(this).count { it.enabled }
+        val connected = relayStateMap.values.count { it.phase == RelayClient.Phase.CONNECTED }
         val relayText = when {
-            !Settings.relayEnabled(this) -> "远程访问未开启"
+            on == 0 -> "远程访问未开启"
+            on > 1 -> "已连接 $connected/$on 个中继"
             r == null -> "中继未启动"
             r.phase == RelayClient.Phase.CONNECTED -> "已连接中继"
             r.phase == RelayClient.Phase.CONNECTING -> "正在连接中继"
