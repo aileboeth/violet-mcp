@@ -11,6 +11,14 @@ object ReadOnlyPolicy {
         "get_foreground_app",
         "get_app_usage_stats",
         "get_screen_state",
+        // 生活状态（1.4.1）
+        "next_alarm",
+        "now_playing",
+        "audio_output",
+        "network_state",
+        "step_count",
+        "calendar_events",
+        "phone_events",
         // 设备信息
         "device_info",
         "screen_info",

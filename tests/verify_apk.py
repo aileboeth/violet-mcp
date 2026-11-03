@@ -30,6 +30,11 @@ EXPECTED_PERMISSIONS = {
     "android.permission.PACKAGE_USAGE_STATS",
     # 1.4.0：安装本应用自己的更新（只在 AppUpdater 里用 PackageInstaller，见下面的检查）
     "android.permission.REQUEST_INSTALL_PACKAGES",
+    # 1.4.1 生活状态：步数、日历（只读）、认出 Wi-Fi（定位，可选）；都要用户在“工具与权限”页点“去授权”
+    "android.permission.ACTIVITY_RECOGNITION",
+    "android.permission.READ_CALENDAR",
+    "android.permission.ACCESS_FINE_LOCATION",
+    "android.permission.ACCESS_COARSE_LOCATION",
 }
 # androidx.core 自动添加的签名级权限（只允许本应用自己使用），不是对外权限
 AUTO_PERMISSION = re.compile(r"\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION$")

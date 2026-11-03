@@ -1,8 +1,15 @@
 package com.mcp.server
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -49,7 +57,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.mcp.server.core.ToolDefinition
 import com.mcp.server.server.Settings
+import com.mcp.server.tools.LifeTools
+import com.mcp.server.tools.PlaceStore
 import com.mcp.server.tools.ToolKit
+import com.mcp.server.tools.ToolKit.Requirement
 import com.mcp.server.tools.UsageTools
 import com.mcp.server.ui.theme.McpTheme
 import org.json.JSONArray
@@ -70,6 +81,37 @@ class ToolsActivity : ComponentActivity() {
     }
 }
 
+/** 这项权限现在有没有 */
+internal fun requirementMet(context: Context, r: Requirement): Boolean = when (r) {
+    Requirement.NONE -> true
+    Requirement.USAGE_ACCESS, Requirement.USAGE_ACCESS_OPTIONAL -> UsageTools.hasUsageAccess(context)
+    Requirement.NOTIFICATION_ACCESS -> LifeTools.hasNotificationAccess(context)
+    Requirement.ACTIVITY -> Build.VERSION.SDK_INT < 29 ||
+        context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+    Requirement.CALENDAR ->
+        context.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+    Requirement.LOCATION_OPTIONAL ->
+        context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+/** 运行时权限（弹系统对话框）；其余的跳到系统设置页 */
+private fun runtimePermissions(r: Requirement): Array<String>? = when (r) {
+    Requirement.ACTIVITY -> if (Build.VERSION.SDK_INT >= 29) arrayOf(Manifest.permission.ACTIVITY_RECOGNITION) else null
+    Requirement.CALENDAR -> arrayOf(Manifest.permission.READ_CALENDAR)
+    Requirement.LOCATION_OPTIONAL -> arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    else -> null
+}
+
+private fun openNotificationAccessSettings(context: Context) {
+    try {
+        context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: Exception) {
+        context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(android.net.Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
@@ -77,10 +119,21 @@ fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
     // 切换开关或从系统设置返回后刷新
     var refresh by remember { mutableIntStateOf(0) }
     val groups = remember(refresh) { ToolKit.groupedTools() }
-    val usageAccess = remember(refresh, resumeTick) { UsageTools.hasUsageAccess(context) }
+    val tick = refresh + resumeTick
     var fgDetail by remember { mutableStateOf(Settings.foregroundDetail(context)) }
     var selected by remember { mutableStateOf<ToolDefinition?>(null) }
     var confirmSensitive by remember { mutableStateOf<ToolDefinition?>(null) }
+    var namingWifi by remember { mutableStateOf<String?>(null) }
+    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh++ }
+
+    fun grant(r: Requirement) {
+        val perms = runtimePermissions(r)
+        when {
+            perms != null -> askPermission.launch(perms)
+            r == Requirement.NOTIFICATION_ACCESS -> openNotificationAccessSettings(context)
+            else -> openUsageAccessSettings(context)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -107,9 +160,9 @@ fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
         ) {
             item(key = "notice") {
                 Text(
-                    "这里决定 Violet 能看到哪些信息。关闭的工具不会出现在工具列表里，Violet 直接调用也会被拒绝；" +
-                        "这些开关只能在手机上修改。标“敏感”的工具可能透露完整使用记录、已装应用或设备信息，默认关闭。" +
-                        "所有工具都只读，命令执行、文件修改、网络请求等能力已从应用中移除。",
+                    "打开哪一项，Violet 就能知道哪一项；关着的她看不到，问了也会被拒绝。" +
+                        "所有项目都只能“看”，不能改你的手机。标“敏感”的会透露比较多的隐私，默认关着。" +
+                        "这些开关只能在手机上改。点一行可以看详细说明。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -125,12 +178,14 @@ fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
                     )
                 }
                 items(tools, key = { it.name }) { tool ->
+                    val req = ToolKit.requirement(tool.name)
+                    val met = remember(tick, tool.name) { requirementMet(context, req) }
                     ToolRow(
                         tool = tool,
                         enabled = ToolKit.isEnabled(tool.name),
                         sensitive = ToolKit.isSensitive(tool.name),
-                        requirement = ToolKit.requirement(tool.name),
-                        usageAccess = usageAccess,
+                        requirement = req,
+                        granted = met,
                         onToggle = {
                             val on = ToolKit.isEnabled(tool.name)
                             if (!on && ToolKit.isSensitive(tool.name)) {
@@ -141,8 +196,11 @@ fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
                             }
                         },
                         onInfo = { selected = tool },
-                        onGrant = { openUsageAccessSettings(context) },
+                        onGrant = { grant(req) },
                     )
+                    if (tool.name == "network_state" && ToolKit.isEnabled(tool.name)) {
+                        WifiPlaceRow(tick = tick, onName = { namingWifi = it })
+                    }
                 }
                 if (category == "手机感知") {
                     item(key = "fg_detail") {
@@ -151,10 +209,10 @@ fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("前台应用：详细模式", style = MaterialTheme.typography.bodyMedium)
+                                Text("正在用的 App：多告诉她一点", style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    if (fgDetail) "熄屏、锁屏或无法确定时，也会告诉 Violet 最近一次使用的应用及判断原因"
-                                    else "默认：只在确定是当前应用时才给出应用名；其他情况只返回状态",
+                                    if (fgDetail) "开着：熄屏、锁屏或看不准的时候，也告诉她你最后用的是哪个 App"
+                                    else "关着：只有确定你正在用某个 App 时才告诉她是哪个",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -172,30 +230,67 @@ fun ToolsScreen(onBack: () -> Unit = {}, resumeTick: Int = 0) {
 
     selected?.let { tool -> ToolDetailDialog(tool = tool, onDismiss = { selected = null }) }
 
+    namingWifi?.let { key ->
+        var text by remember(key) { mutableStateOf(PlaceStore.label(context, key) ?: "") }
+        AlertDialog(
+            onDismissRequest = { namingWifi = null },
+            title = { Text("给现在的 Wi-Fi 起个名字") },
+            text = {
+                Column {
+                    Text("比如“家”“学校”“公司”。以后连上这个 Wi-Fi，Violet 只会知道你在“${text.ifBlank { "…" }}”，" +
+                        "不会知道 Wi-Fi 的名字。留空就是不再认这个 Wi-Fi。",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.padding(4.dp))
+                    OutlinedTextField(value = text, onValueChange = { text = it.take(20) }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { PlaceStore.set(context, key, text); namingWifi = null; refresh++ }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { namingWifi = null }) { Text("取消") } },
+        )
+    }
+
     confirmSensitive?.let { tool ->
+        val plain = ToolKit.plain(tool.name)
         AlertDialog(
             onDismissRequest = { confirmSensitive = null },
-            title = { Text("开启敏感工具？") },
-            text = { Text("“${tool.name}”可能让 Violet 看到${sensitiveWhat(tool.name)}。只在需要时开启，随时可以关闭。") },
+            title = { Text("打开“${plain.title}”？") },
+            text = { Text("${plain.text}\n这项比较私密，只在需要时打开，随时可以关掉。") },
             confirmButton = {
                 TextButton(onClick = {
                     ToolKit.setEnabled(tool.name, true)
                     confirmSensitive = null
                     refresh++
-                }) { Text("开启") }
+                }) { Text("打开") }
             },
             dismissButton = { TextButton(onClick = { confirmSensitive = null }) { Text("取消") } },
         )
     }
 }
 
-private fun sensitiveWhat(name: String): String = when (name) {
-    "get_app_usage_stats" -> "你在一段时间内使用了哪些应用、各用了多久"
-    "installed_apps" -> "手机上装了哪些应用"
-    "app_info" -> "某个应用是否已安装及其版本"
-    "system_properties", "device_info" -> "手机型号、系统版本等设备信息"
-    "permission_state" -> "本应用的权限配置"
-    else -> "较多个人信息"
+/** network_state 下面：现在连着的 Wi-Fi 叫什么（你起的名字），可以起名 / 改名 */
+@Composable
+private fun WifiPlaceRow(tick: Int, onName: (String) -> Unit) {
+    val context = LocalContext.current
+    val key = remember(tick) { LifeTools.currentWifiKey(context) }
+    val label = key?.let { PlaceStore.label(context, it) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            when {
+                key == null -> "要认出你在哪个 Wi-Fi，先给“位置”权限并连上 Wi-Fi"
+                label == null -> "现在连着的 Wi-Fi 还没有名字"
+                else -> "现在连着的 Wi-Fi：$label"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (key != null) TextButton(onClick = { onName(key) }) { Text(if (label == null) "起名" else "改名") }
+    }
 }
 
 @Composable
@@ -203,12 +298,13 @@ private fun ToolRow(
     tool: ToolDefinition,
     enabled: Boolean,
     sensitive: Boolean,
-    requirement: ToolKit.Requirement,
-    usageAccess: Boolean,
+    requirement: Requirement,
+    granted: Boolean,
     onToggle: () -> Unit,
     onInfo: () -> Unit,
     onGrant: () -> Unit,
 ) {
+    val plain = ToolKit.plain(tool.name)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -224,7 +320,7 @@ private fun ToolRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        tool.name,
+                        plain.title,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color = if (enabled) MaterialTheme.colorScheme.onSurface
@@ -236,24 +332,24 @@ private fun ToolRow(
                     }
                 }
                 Text(
-                    tool.description,
+                    plain.text.ifEmpty { tool.description },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = 3,
                 )
-                if (requirement != ToolKit.Requirement.NONE) {
-                    val missing = !usageAccess
+                if (requirement != Requirement.NONE) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            requirement.label + if (missing) "（未授权）" else "（已授权）",
+                            requirement.label + if (granted) "（已给）" else "（还没给）",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (missing && requirement == ToolKit.Requirement.USAGE_ACCESS)
-                                MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
+                            color = if (!granted && requirement.required) MaterialTheme.colorScheme.error
+                            else if (granted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
-                        if (missing) TextButton(onClick = onGrant) { Text("去授权") }
+                        if (!granted) TextButton(onClick = onGrant) { Text("去授权") }
                     }
-                    if (missing && enabled && requirement == ToolKit.Requirement.USAGE_ACCESS) {
-                        Text("未授权时 Violet 调用会得到“权限不足”", style = MaterialTheme.typography.labelSmall,
+                    if (!granted && enabled && requirement.required) {
+                        Text("没给这个权限时，她问了只会得到“没有权限”", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -262,7 +358,7 @@ private fun ToolRow(
             IconButton(onClick = onToggle) {
                 Icon(
                     if (enabled) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (enabled) "关闭工具" else "开启工具",
+                    contentDescription = if (enabled) "关掉：${plain.title}" else "打开：${plain.title}",
                     tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                     modifier = Modifier.size(28.dp),
                 )
@@ -273,20 +369,22 @@ private fun ToolRow(
 
 @Composable
 private fun ToolDetailDialog(tool: ToolDefinition, onDismiss: () -> Unit) {
+    val plain = ToolKit.plain(tool.name)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tool.name, fontWeight = FontWeight.Bold) },
+        title = { Text(plain.title, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("分类：${tool.category}", style = MaterialTheme.typography.labelMedium,
+                Text(plain.text, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.padding(6.dp))
+                Text("分类：${tool.category} · 工具名：${tool.name}", style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.padding(6.dp))
-                Text("功能描述", style = MaterialTheme.typography.titleSmall)
-                Text(tool.description, style = MaterialTheme.typography.bodyMedium,
+                Text("给 AI 看的说明", style = MaterialTheme.typography.titleSmall)
+                Text(tool.description, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.padding(8.dp))
+                Spacer(Modifier.padding(6.dp))
                 Text("参数", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.padding(4.dp))
                 val props = tool.inputSchema.optJSONObject("properties")
                 val required = tool.inputSchema.optJSONArray("required")
                 if (props != null && props.length() > 0) {

@@ -1,5 +1,22 @@
 # 测试报告
 
+## Violet MCP 1.4.1（中继 1.2.0 不变）— 2026-11-03
+
+新增 7 个只读“生活状态”工具（`next_alarm`、`now_playing`、`audio_output`、`network_state`、`step_count`、
+`calendar_events`、`phone_events`），“工具与权限”页改成中文名 + 大白话说明（`ToolKit.PLAIN`），“去授权”按权限类型
+弹系统请求或打开系统设置。新增权限 `ACTIVITY_RECOGNITION`、`READ_CALENDAR`、`ACCESS_FINE_LOCATION` /
+`ACCESS_COARSE_LOCATION`（可选），新增只能由系统绑定的 `MediaListenerService`（通知使用权，不处理通知）。
+鉴权、中继逻辑没有变化；“手机上的动静”由 Violet 每分钟取一次，不经中继推送。
+
+| 测试 | 结果 |
+|---|---|
+| mcp-core + Robolectric（`:mcp-core:test :app:testDebugUnitTest --offline`，**模拟**） | 通过，126/126（新增 `LifeToolsTest` 6 项：闹钟 / 耳机默认开且有结果、没系统权限时拒绝不猜、Wi-Fi 名称不外传、步数跨零点和重启接得上、动静按序号取、每个工具都有大白话说明；`HardeningTest` 默认开启集合加入 `next_alarm`、`audio_output`） |
+| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.1-{debug,release}.apk`，versionCode 8 |
+| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项；权限白名单加入上面 4 个权限 |
+| 签名（`tools/sign_release.py`，用户“先全部做完”） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.4.0 相同，可以覆盖安装 / 应用内更新），Android 8.x 为旧证书，lineage 旧 → 新 |
+| 发布包（`tools/package_release.py --version 1.4.1 --relay-version 1.2.0`） | 通过：`dist/v1.4.1/`，发布产物和交接包扫描问题 0 个 |
+| 真机（步数、正在播放、日历、Wi-Fi 起名、动静记录、各权限弹窗） | 无法验证（没有设备）；Wi-Fi 识别只在 Android 12+ 有效 |
+
 ## Violet MCP 1.4.0（中继 1.2.0 不变）— 2026-10-27
 
 新增应用内更新（`mcp-core` 的 `com.mcp.server.update.UpdateChecker`、App 的 `AppUpdater` / `UpdateInstallReceiver`、设置页“应用更新”、主页提示），新增权限 `REQUEST_INSTALL_PACKAGES`。工具、鉴权、中继逻辑没有变化。

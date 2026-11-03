@@ -1,6 +1,6 @@
-# 工具清单与权限说明（1.4.0）
+# 工具清单与权限说明（1.4.1）
 
-服务器能暴露的工具只有下面 14 个**只读**工具，分两层控制：
+服务器能暴露的工具只有下面 21 个**只读**工具（1.4.1 新增 7 个“生活状态”工具），分两层控制：
 
 1. **第一层：只读白名单**，写死在 [`ReadOnlyPolicy.kt`](../mcp-core/src/main/kotlin/com/mcp/server/core/ReadOnlyPolicy.kt)。`ToolRegistry` 拒绝注册名单外的工具，`tools/list` 和 `tools/call` 都只查这个注册表。
 2. **第二层：隐私开关**，默认值在 [`PrivacyPolicy.kt`](../mcp-core/src/main/kotlin/com/mcp/server/core/PrivacyPolicy.kt)。用户在 App 的“工具与权限”页逐个开关；**只能在手机上修改**，没有任何 MCP 方法能改动它。关闭的工具不出现在 `tools/list`，直接调用时与未知工具一样返回 `-32602`。
@@ -23,8 +23,32 @@
 | `storage_info` | 关 | — | 无 |
 | `locale_info` | 关 | — | 无 |
 | `time_now` | 关 | — | 无 |
+| `next_alarm`（1.4.1） | **开** | — | 无 |
+| `audio_output`（1.4.1） | **开** | — | 无 |
+| `now_playing`（1.4.1） | 关 | 是 | 通知使用权（只读媒体会话，不读通知） |
+| `network_state`（1.4.1） | 关 | 是 | 无（定位可选：认出是哪个 Wi-Fi） |
+| `step_count`（1.4.1） | 关 | — | 身体活动 |
+| `calendar_events`（1.4.1） | 关 | 是 | 日历 |
+| `phone_events`（1.4.1） | 关 | — | 无（到达 / 离开地点要定位，可选） |
 
-开启敏感工具时，App 会弹窗说明它会暴露哪些信息。
+开启敏感工具时，App 会弹窗说明它会暴露哪些信息。1.4.1 起“工具与权限”页每一项都显示中文名和一句大白话说明
+（`ToolKit.PLAIN`：“开了以后 Violet 能知道什么”），工具名和给模型看的说明放在详情里；“去授权”直接弹出对应的
+系统权限请求（运行时权限）或打开对应的系统设置页（使用情况访问、通知使用权）。
+
+## 1.5 生活状态（1.4.1）
+
+| 工具 | 返回 | 说明 |
+|---|---|---|
+| `next_alarm` | `hasAlarm`、`time`、`minutesUntil` | `AlarmManager.getNextAlarmClock()`，任何闹钟 App 设的都算 |
+| `now_playing` | `playing`、`sessions[]`（`app`、`title`、`artist`、`album`、`playing`） | `MediaSessionManager`；系统要求通知使用权，`MediaListenerService` 不处理任何通知 |
+| `audio_output` | `headphonesOrBluetooth`、`devices[]`、`musicActive` | `AudioManager.getDevices` |
+| `network_state` | `type`（wifi / cellular / ethernet / none / other）、`place` | `place` 是用户在 App 里给当前 Wi-Fi 起的名字（“家”）；Wi-Fi 名称（SSID）只在手机里比对，**不返回** |
+| `step_count` | `stepsToday`、`countedSince` | 计步传感器；服务运行时按 15 分钟批量记读数，跨零点、重启都能接上 |
+| `calendar_events` | `events[]`（`title`、`allDay`、`start`、`end`） | 参数 `days`（1–7，默认 2）；不读地点、参与人、备注；跳过已拒绝的 |
+
+| `phone_events` | `epoch`、`latestSeq`、`events[]`（`seq`、`type`、`at`、`detail`） | 手机上的动静：`unlock`（带 `screenOffMinutes`）、`screen_on` / `screen_off`、`charger_connected` / `charger_disconnected`、`headphones_connected` / `headphones_disconnected`、`place_arrived` / `place_left`（带 `place`）。服务运行时由动态注册的系统广播、`AudioDeviceCallback` 和网络回调记录，只在内存里（最多 200 条，不写文件）；参数 `after`（上次的 `latestSeq`）、`limit`。Violet 每分钟取一次新动静（“推送”不经过中继，中继不用改）；`epoch` 变了说明服务重启过 |
+
+不读勿扰模式（用户长期开着勿扰，靠手表提醒，勿扰不代表不方便）。
 
 ## 1. 手机感知
 
@@ -149,12 +173,19 @@
 | `PACKAGE_USAGE_STATS` | 前台应用、使用时长 | 用户在系统设置中手动开启 |
 | `REQUEST_INSTALL_PACKAGES`（1.4.0） | 安装本应用自己的更新：只装包名相同、版本更高、签名证书链包含本应用证书、SHA-256 与发布一致的安装包（`AppUpdater`）；与 MCP 工具无关 | 用户在系统设置里为本应用打开“安装未知应用” |
 
+| `ACTIVITY_RECOGNITION`（1.4.1） | `step_count` | 用户在“工具与权限”点“去授权”时 |
+| `READ_CALENDAR`（1.4.1） | `calendar_events`（只读） | 同上 |
+| `ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION`（1.4.1，可选） | 系统规定读 Wi-Fi 名称要定位权限；只用来认出给起过名字的 Wi-Fi，不读位置 | 同上 |
+| 通知使用权（`BIND_NOTIFICATION_LISTENER_SERVICE`，1.4.1） | `now_playing` 读媒体会话；服务不处理通知 | 用户在系统设置里打开 |
+
 另有 `com.mcp.server.violet.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`，由 androidx.core 自动添加，只有本应用自己能使用。
 
-不需要的权限：Root、Shizuku、无障碍服务、所有文件访问、`QUERY_ALL_PACKAGES`、悬浮窗、修改系统设置、电话、短信、定位、相机、麦克风。
+不需要的权限：Root、Shizuku、无障碍服务、所有文件访问、`QUERY_ALL_PACKAGES`、悬浮窗、修改系统设置、电话、短信、相机、麦克风。
+（定位权限 1.4.1 起可选，只为认出 Wi-Fi，见上表。）
 
 其他设置：
 
 - `allowBackup=false`，数据提取规则排除全部数据。
 - `usesCleartextTraffic=false`。
-- 只有启动器 Activity 和开机广播接收器是导出组件；开机接收器只响应受保护的系统广播。
+- 只有启动器 Activity、开机广播接收器和（1.4.1）`MediaListenerService` 是导出组件；开机接收器只响应受保护的系统广播，
+  `MediaListenerService` 只能由系统绑定（`BIND_NOTIFICATION_LISTENER_SERVICE`）。

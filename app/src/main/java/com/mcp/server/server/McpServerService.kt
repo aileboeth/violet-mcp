@@ -20,6 +20,7 @@ import com.mcp.server.core.LocalHttpServer
 import com.mcp.server.core.McpEndpoint
 import com.mcp.server.core.McpProtocol
 import com.mcp.server.core.RelayClient
+import com.mcp.server.tools.PhoneEvents
 import com.mcp.server.tools.ToolKit
 import com.mcp.server.tools.UsageTools
 import org.json.JSONObject
@@ -177,12 +178,45 @@ class McpServerService : Service() {
         if (!UsageTools.hasUsageAccess(this)) {
             LogStore.warn("未授予使用情况访问权限：前台应用、使用时长工具会返回权限不足")
         }
+        startStepWatch()
+        if (ToolKit.isEnabled("phone_events")) PhoneEvents.start(this)
         LogStore.info("服务已启动，已开启 ${ToolKit.enabledCount()} 个只读工具")
         refreshNotification()
         return true
     }
 
+    private var stepListener: android.hardware.SensorEventListener? = null
+
+    /**
+     * 1.4.1：“今天的步数”打开且有“身体活动”权限时，服务运行期间顺带记下计步器读数（系统批量上报，最长 15 分钟一次，
+     * 几乎不耗电），这样“今天”能从零点附近算起，而不是从当天第一次被问起算。
+     */
+    private fun startStepWatch() {
+        if (stepListener != null || !ToolKit.isEnabled("step_count")) return
+        if (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        val sm = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+        val sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER) ?: return
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                event.values.firstOrNull()?.let { com.mcp.server.tools.StepStore.record(this@McpServerService, it, System.currentTimeMillis()) }
+            }
+
+            override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+        }
+        if (sm.registerListener(listener, sensor, android.hardware.SensorManager.SENSOR_DELAY_NORMAL, 15 * 60 * 1_000_000)) {
+            stepListener = listener
+        }
+    }
+
+    private fun stopStepWatch() {
+        stepListener?.let { (getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager).unregisterListener(it) }
+        stepListener = null
+    }
+
     private fun stopEverything() {
+        stopStepWatch()
+        PhoneEvents.stop(this)
         AppUpdater.stopPeriodic()
         unregisterNetworkCallback()
         relay?.stop()
@@ -264,6 +298,7 @@ class McpServerService : Service() {
                 } else if (wasDown) {
                     LogStore.debug("默认网络可用")
                 }
+                placeCheck()
             }
 
             override fun onLost(network: Network) {
@@ -274,6 +309,12 @@ class McpServerService : Service() {
                         relay?.setNetworkAvailable(false)
                     }
                 }
+                placeCheck()
+            }
+
+            // 1.4.1 phone_events：到达 / 离开起过名字的 Wi-Fi 地点
+            private fun placeCheck() {
+                if (ToolKit.isEnabled("phone_events")) runCatching { PhoneEvents.onNetworkChanged(this@McpServerService) }
             }
         }
         try {
@@ -393,4 +434,6 @@ private const val INSTRUCTIONS =
     "这是运行在用户 Android 手机上的只读 MCP 服务器，供 Violet 感知手机状态。所有工具都只读，不能修改手机。" +
         "get_foreground_app 只有 state=current 时才表示用户正在使用该应用；screen_off、locked、unknown 表示无法确定当前应用，" +
         "不要猜测。get_screen_state 是实时读取的亮灭屏和锁屏状态。工具列表由用户在手机上控制，未列出的工具不可用。" +
-        "如果工具返回 permission_denied，说明用户尚未在手机上授予使用情况访问权限。"
+        "如果工具返回 permission_denied，说明用户尚未在手机上授予使用情况访问权限。" +
+        "生活状态类工具（next_alarm、now_playing、audio_output、network_state、step_count、calendar_events）" +
+        "各自需要用户单独打开，返回 PERMISSION_DENIED 时说明用户没给对应的系统权限，不要猜。"

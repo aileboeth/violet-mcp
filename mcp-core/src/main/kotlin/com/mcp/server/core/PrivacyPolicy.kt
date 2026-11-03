@@ -16,6 +16,9 @@ object PrivacyPolicy {
         "get_screen_state",
         "screen_info",
         "health",
+        // 1.4.1：只是此刻的状态，不需要额外权限
+        "next_alarm",
+        "audio_output",
     )
 
     /** 可能泄露完整使用记录、已装应用或设备标识的工具：界面上单独标注，需要用户单独开启 */
@@ -26,6 +29,10 @@ object PrivacyPolicy {
         "system_properties",
         "device_info",
         "permission_state",
+        // 1.4.1：在听什么、日程标题、在哪个地方
+        "now_playing",
+        "calendar_events",
+        "network_state",
     )
 
     fun defaultEnabled(name: String): Boolean = name in DEFAULT_ENABLED

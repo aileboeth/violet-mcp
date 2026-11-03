@@ -103,8 +103,9 @@ class HardeningTest {
 
     @Test
     fun privacyDefaults() {
-        assertEquals(setOf("battery", "get_foreground_app", "get_screen_state", "screen_info", "health"),
-            PrivacyPolicy.DEFAULT_ENABLED)
+        // 1.4.1: + next_alarm, audio_output (state of this moment, no extra permission)
+        assertEquals(setOf("battery", "get_foreground_app", "get_screen_state", "screen_info", "health",
+            "next_alarm", "audio_output"), PrivacyPolicy.DEFAULT_ENABLED)
         for (n in PrivacyPolicy.DEFAULT_ENABLED + PrivacyPolicy.SENSITIVE) assertTrue(n, ReadOnlyPolicy.isAllowed(n))
         for (n in PrivacyPolicy.SENSITIVE) assertFalse("敏感工具 $n 不能默认开启", PrivacyPolicy.defaultEnabled(n))
         // 用默认值构造的注册表：敏感工具既不在列表里，也无法调用
