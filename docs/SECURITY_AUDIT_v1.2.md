@@ -1,121 +1,123 @@
-# 权限与只读安全审计（1.2.0-eve / 中继 1.1.0）
+# Permissions and read-only security audit (1.2.0-eve / relay 1.1.0)
 
-审计日期：2026-10-10。第一轮审查见 [SECURITY_REVIEW.md](SECURITY_REVIEW.md)，本轮审查结论见 [REVIEW_v1.2.md](REVIEW_v1.2.md)。
+**English** | [简体中文](SECURITY_AUDIT_v1.2.zh-CN.md)
 
-## 1. 结论
+Audit date: 2026-10-10. The first review is in [SECURITY_REVIEW.md](SECURITY_REVIEW.md), this round's review findings in [REVIEW_v1.2.md](REVIEW_v1.2.md).
 
-| 项目 | 结论 | 依据 |
+## 1. Conclusions
+
+| Item | Conclusion | Basis |
 |---|---|---|
-| 强制只读 | 通过（自动化） | 白名单写死在代码里；注册表拒绝名单外工具；调用前再查一次；APK 中没有命令执行、文件写入、强杀应用、发通知（工具）、写系统设置的调用 |
-| 绕过手段（别名、大小写、批量、重复键、畸形请求、协议兼容入口） | 通过（自动化） | 46 个名字变体、批量、重复键、深层嵌套、非法 UTF-8、jsonrpc≠2.0、超大批量都被拒绝；原项目的 `/sse`、`/tools`、桥接已删除 |
-| 第二层隐私开关 | 通过（自动化 + 模拟环境） | 默认只开 5 个工具；关闭的工具既不列出也无法调用；开关只能在手机界面修改 |
-| 最小权限 | 通过（静态检查） | 9 个权限，全部有用途；可选权限只在用户点按钮时请求；只有启动器 Activity 和开机广播接收器是导出组件 |
-| 监听安全 | 通过（自动化） | 手机本地端点只能绑定回环地址，代码层面拒绝其他地址；中继遇到“非回环地址且未开 TLS”时拒绝启动，并在绑定后按实际地址再检查一次 |
-| 凭据存储 | 通过（模拟环境），**真机 Keystore 未验证** | 使用 AES-256-GCM（Android Keystore）；迁移失败时保留原值；无法解密时拒绝认证而不是悄悄重置 |
-| 日志 | 通过（自动化） | debug 级别下中继和 harness 日志中都没有出现令牌或设备密钥；手机日志写入前做脱敏；导出的日志不含设备型号和使用记录 |
-| 后台运行 | **真机未验证** | 只在模拟环境（Robolectric）中验证了状态机，见 [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) |
+| Enforced read-only | Pass (automated) | The allowlist is hard-coded; the registry refuses tools outside it; checked again before each call; the APK has no calls for command execution, file writing, force-stopping apps, posting notifications (as a tool) or writing system settings |
+| Bypass attempts (aliases, case, batches, duplicate keys, malformed requests, protocol compatibility entries) | Pass (automated) | 46 name variants, batches, duplicate keys, deep nesting, invalid UTF-8, jsonrpc≠2.0 and oversized batches are all refused; the original project's `/sse`, `/tools` and bridges were removed |
+| Second-layer privacy switches | Pass (automated + simulated environment) | Only 5 tools on by default; tools that are off are neither listed nor callable; switches can only be changed in the phone's UI |
+| Least privilege | Pass (static check) | 9 permissions, all with a purpose; optional permissions are requested only when the user taps a button; only the launcher Activity and the boot broadcast receiver are exported components |
+| Listening security | Pass (automated) | The phone's local endpoint can only bind to loopback, and other addresses are refused in code; the relay refuses to start on "a non-loopback address without TLS", and checks again against the actual address after binding |
+| Credential storage | Pass (simulated environment), **Keystore on real phones not verified** | AES-256-GCM (Android Keystore); the original value is kept when migration fails; authentication is refused when decryption is impossible, rather than silently resetting |
+| Logs | Pass (automated) | No token or device key appears in the relay or harness logs at debug level; phone logs are redacted before writing; exported logs contain no device model or usage records |
+| Background running | **Not verified on a real phone** | Only the state machine was verified in a simulated environment (Robolectric); see [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) |
 
-## 2. 执行入口逐一核查
+## 2. Every execution entry, checked one by one
 
-| 入口 | 能做什么 | 结论 |
+| Entry | What it can do | Conclusion |
 |---|---|---|
-| `POST /mcp` → `McpProtocol` | 只有 `initialize`、`ping`、`tools/list`、`tools/call`；其他方法返回 -32601 | 只读 |
-| `tools/call` → `ToolRegistry.resolve` | 只解析白名单内、已注册、且用户开启的工具；名字精确匹配 | 只读 |
-| `GET /status`、`GET /health` | 返回运行状态，不含密钥 | 只读 |
-| 中继帧（`hello_ack`、`ping`、`http_request`、`error`） | `http_request` 交给 `McpEndpoint`，走同一套鉴权和白名单；没有任何配置类帧 | 只读 |
-| `MainActivity`（导出，启动器入口） | 不读取 intent extras | 不能被其他应用驱动执行操作 |
-| `BootReceiver`（导出） | 只响应 `BOOT_COMPLETED`、`MY_PACKAGE_REPLACED`，这两个都是受保护广播，其他应用无法伪造；1.1.0 中可被伪造的 `QUICKBOOT_POWERON` 已删除 | 只会恢复本服务 |
-| `McpServerService`（未导出） | — | 其他应用无法启动 |
-| 通知上的“停止”按钮 | immutable PendingIntent，只能停止本服务 | — |
+| `POST /mcp` → `McpProtocol` | Only `initialize`, `ping`, `tools/list`, `tools/call`; other methods return -32601 | Read-only |
+| `tools/call` → `ToolRegistry.resolve` | Resolves only tools that are allowlisted, registered and turned on by the user; names match exactly | Read-only |
+| `GET /status`, `GET /health` | Return the running state, no secrets | Read-only |
+| Relay frames (`hello_ack`, `ping`, `http_request`, `error`) | `http_request` is handed to `McpEndpoint` and goes through the same authentication and allowlist; there are no configuration frames | Read-only |
+| `MainActivity` (exported, launcher entry) | Reads no intent extras | Cannot be driven by other apps to perform actions |
+| `BootReceiver` (exported) | Responds only to `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED`, both protected broadcasts other apps cannot fake; the fakeable `QUICKBOOT_POWERON` of 1.1.0 was removed | Can only resume this service |
+| `McpServerService` (not exported) | — | Other apps cannot start it |
+| The "Stop" button on the notification | An immutable PendingIntent that can only stop this service | — |
 
-### 应用自身（非 MCP 工具）的操作
+### The app's own operations (not MCP tools)
 
-以下操作都由用户在 App 界面上触发，或属于 App 自身的运行需要，不暴露给 MCP 客户端：
+These are all triggered by the user in the app's UI or are needed for the app itself to run, and are not exposed to MCP clients:
 
-- 复制令牌到剪贴板
-- 分享诊断日志（系统分享面板）
-- 打开系统设置页（使用情况访问、电池优化）
-- 前台服务通知
-- 开机自启被系统拦截时，发出一条提醒通知
+- copying the token to the clipboard
+- sharing diagnostic logs (system share sheet)
+- opening system settings pages (usage access, battery optimisation)
+- the foreground service notification
+- a reminder notification when start on boot is blocked by the system
 
-## 3. 工具副作用审计
+## 3. Audit of tool side effects
 
-除逐个阅读代码（见 REVIEW_v1.2 §3）外，`ToolsPolicyTest.everyToolRunsWithoutObservableSideEffects`（模拟环境）会开启全部 14 个工具，并逐个调用。调用前后检查以下几项，均无变化：
+Besides reading the code tool by tool (see REVIEW_v1.2 §3), `ToolsPolicyTest.everyToolRunsWithoutObservableSideEffects` (simulated environment) turns on all 14 tools and calls each one. Before and after the calls it checks the following, and none changed:
 
-- 没有启动任何 Activity 或 Service
-- 没有发送广播
-- 没有发出通知
-- 屏幕亮度设置没有被改动
-- 应用目录中没有新增文件
+- no Activity or Service was started
+- no broadcast was sent
+- no notification was posted
+- the screen brightness setting was not changed
+- no new file appeared in the app's directory
 
-| 工具 | 默认 | 敏感 | 需要的权限 | 说明 |
+| Tool | Default | Sensitive | Permission needed | Notes |
 |---|---|---|---|---|
-| `battery` | 开 | — | 无 | 读取电池粘性广播（不注册接收器） |
-| `get_foreground_app` | 开 | — | 使用情况访问 | 默认只返回 state / app / package / observed_at / age_seconds；非 current 状态不给应用名 |
-| `get_screen_state` | 开 | — | 无（使用情况访问可选） | 实时读取 PowerManager、Display、Keyguard |
-| `screen_info` | 开 | — | 无 | 分辨率、刷新率、亮度设置 |
-| `health` | 开 | — | 无 | 只含服务状态，不含密钥 |
-| `get_app_usage_stats` | 关 | 是 | 使用情况访问 | 完整的使用记录 |
-| `installed_apps` | 关 | 是 | 无 | 已安装应用列表 |
-| `app_info` | 关 | 是 | 无 | 可探测某个应用是否安装 |
-| `device_info` | 关 | 是 | 无 | 型号、指纹 |
-| `system_properties` | 关 | 是 | 无 | 改为只用公开的 `Build` API，不再反射调用隐藏 API |
-| `permission_state` | 关 | 是 | 无 | 本应用的权限配置 |
-| `storage_info`、`locale_info`、`time_now` | 关 | — | 无 | 低敏感，但不属于默认开启范围 |
+| `battery` | on | — | None | Reads the sticky battery broadcast (registers no receiver) |
+| `get_foreground_app` | on | — | Usage access | By default returns only state / app / package / observed_at / age_seconds; non-current states give no app name |
+| `get_screen_state` | on | — | None (usage access optional) | Reads PowerManager, Display and Keyguard in real time |
+| `screen_info` | on | — | None | Resolution, refresh rate, brightness setting |
+| `health` | on | — | None | Only service state, no secrets |
+| `get_app_usage_stats` | off | yes | Usage access | Full usage history |
+| `installed_apps` | off | yes | None | List of installed apps |
+| `app_info` | off | yes | None | Can probe whether an app is installed |
+| `device_info` | off | yes | None | Model, fingerprint |
+| `system_properties` | off | yes | None | Now uses only the public `Build` API, no more reflective calls to hidden APIs |
+| `permission_state` | off | yes | None | This app's permission configuration |
+| `storage_info`, `locale_info`, `time_now` | off | — | None | Low sensitivity, but not in the default-on set |
 
-## 4. Android 权限
+## 4. Android permissions
 
-| 权限 | 何时需要 | 何时请求 |
+| Permission | When needed | When requested |
 |---|---|---|
-| `INTERNET`、`ACCESS_NETWORK_STATE` | 中继连接、网络切换检测 | 安装时（普通权限） |
-| `FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_SPECIAL_USE` | 长期运行 | 安装时 |
-| `RECEIVE_BOOT_COMPLETED` | 开机恢复（只有用户开启“开机自启”后才会生效） | 安装时 |
-| `WAKE_LOCK` | 处理单个请求时持有短时 WakeLock（≤10 秒）；常驻 WakeLock 默认关闭 | 安装时 |
-| `POST_NOTIFICATIONS` | 显示前台服务通知（可选） | 用户第一次点“启动”时 |
-| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | 只针对本应用的“电池无限制”（可选），不要求关闭全局省电 | 用户在设置页点“申请”时 |
-| `PACKAGE_USAGE_STATS` | 前台应用、使用时长 | 用户在系统设置里手动开启（AppOps） |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | Relay connection, detecting network changes | At install (normal permissions) |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE` | Long-running service | At install |
+| `RECEIVE_BOOT_COMPLETED` | Resume after boot (takes effect only after the user turns on "Start on boot") | At install |
+| `WAKE_LOCK` | A short WakeLock (≤10 seconds) while handling a single request; a permanent WakeLock is off by default | At install |
+| `POST_NOTIFICATIONS` | Showing the foreground service notification (optional) | The first time the user taps "Start" |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | "Unrestricted battery" for this app only (optional); global battery saving does not need to be turned off | When the user taps "Request" on the settings page |
+| `PACKAGE_USAGE_STATS` | Foreground app, usage time | Turned on by the user by hand in the system settings (AppOps) |
 
-不需要的权限：Root、Shizuku、无障碍、所有文件访问、`QUERY_ALL_PACKAGES`、悬浮窗、`WRITE_SETTINGS`、电话、短信、定位、摄像头、麦克风。
-`allowBackup=false` 且数据提取规则排除了全部数据；`usesCleartextTraffic=false`。
+Permissions not needed: root, Shizuku, accessibility, all-files access, `QUERY_ALL_PACKAGES`, overlay, `WRITE_SETTINGS`, phone, SMS, location, camera, microphone.
+`allowBackup=false` and the data extraction rules exclude all data; `usesCleartextTraffic=false`.
 
-### `specialUse` 前台服务
+### The `specialUse` foreground service
 
-- **适用性**：本应用需要长期保持一条到用户自己中继的连接，不属于 dataSync、mediaPlayback、location、connectedDevice 等任何预定义类型，因此使用 `specialUse` 并在 Manifest 中声明了用途说明（`PROPERTY_SPECIAL_USE_FGS_SUBTYPE`）。
-- **平台政策**：通过 Google Play 分发需要提交 `specialUse` 用途审核；本项目是自行安装（sideload）。
-- **限制**：Android 15 起 `dataSync` 每天限 6 小时，并且不能从 `BOOT_COMPLETED` 启动，`specialUse` 不受这两条限制。但这**不等于永久存活**：
-  - 用户可以在任务管理器中停止服务；
-  - 系统在内存压力下仍可能回收进程；
-  - 厂商系统可能限制后台运行或网络；
-  - Android 12+ 可能拒绝在后台启动前台服务。
-  这些情况在界面上会显示为“受限”或“已停止”，不会显示成“连接正常”。
+- **Fit**: the app needs to keep a connection to the user's own relay open for a long time, which matches none of the predefined types such as dataSync, mediaPlayback, location or connectedDevice, so it uses `specialUse` and declares the purpose in the manifest (`PROPERTY_SPECIAL_USE_FGS_SUBTYPE`).
+- **Platform policy**: distributing through Google Play requires a `specialUse` purpose review; this project is sideloaded.
+- **Limits**: since Android 15 `dataSync` is limited to 6 hours a day and cannot start from `BOOT_COMPLETED`; `specialUse` is subject to neither. But that **does not mean it lives forever**:
+  - the user can stop the service in the task manager;
+  - the system may still reclaim the process under memory pressure;
+  - vendor systems may restrict background running or networking;
+  - Android 12+ may refuse to start a foreground service from the background.
+  These situations show as "restricted" or "stopped" in the UI, never as "connected".
 
-## 5. 凭据
+## 5. Credentials
 
-| 凭据 | 存储方式 | 轮换 | 撤销 |
+| Credential | Storage | Rotation | Revocation |
 |---|---|---|---|
-| MCP 访问令牌（256 bit） | Keystore AES-GCM；Keystore 不可用时退回明文，并在界面上提示 | 安全页“更换令牌”（旧令牌立即失效，中继同步更新令牌哈希） | 安全页“全部清除” |
-| 中继设备密钥 | 同上 | 在 VPS 上更换 device.secret，再在手机上填写新值 | 安全页“撤销远程凭据” |
-| 中继证书指纹 | 明文（公开信息） | 支持同时填两个指纹，换证书时平滑过渡 | 同上 |
-| 中继 device.secret（VPS） | 文件，权限 0600；只比较 SHA-256 | 删除文件后重启中继 | — |
+| MCP access token (256 bits) | Keystore AES-GCM; falls back to plain text when Keystore is unavailable, with a notice in the UI | "Change token" on the Security page (the old token stops working immediately; the relay updates the token hash in sync) | "Clear all" on the Security page |
+| Relay device key | Same as above | Change device.secret on the VPS, then enter the new value on the phone | "Revoke remote credentials" on the Security page |
+| Relay certificate fingerprint | Plain text (public information) | Two fingerprints can be entered at once for a smooth certificate change | Same as above |
+| Relay device.secret (VPS) | A file with mode 0600; only SHA-256 is compared | Delete the file and restart the relay | — |
 
-**迁移**：1.1.0 的明文令牌在第一次读取时被加密，并验证能解出原值，之后才删除明文；令牌值本身不变，Project Eve 不需要改配置。
+**Migration**: 1.1.0's plain-text token is encrypted on first read and verified to decrypt to the original value, and only then is the plain text deleted; the token value itself does not change, so Project Eve's configuration needs no change.
 
-**兼容处理**：（1.2.0 的描述，已被 1.2.1 取代）1.2.0 在 Keystore 加密失败时会**静默**改用明文，并且在解密失败时会改用残留的明文副本。这两点在 1.2.1 已修复为失败即拒绝（fail closed），兼容模式必须由用户明确同意，详见 [SECURITY_RISK_v1.2.1.md](SECURITY_RISK_v1.2.1.md)。
+**Compatibility handling**: (the 1.2.0 description, superseded by 1.2.1) when Keystore encryption failed, 1.2.0 **silently** switched to plain text, and when decryption failed it used a leftover plain-text copy. Both were fixed in 1.2.1 to fail closed, and compatibility mode needs the user's explicit consent; see [SECURITY_RISK_v1.2.1.md](SECURITY_RISK_v1.2.1.md).
 
-## 6. 中继
+## 6. Relay
 
-- `-client-listen` 的地址必须是回环地址，或者同时开启 `-client-tls`，否则拒绝启动。绑定之后还会按实际地址再检查一次。
-- VPS 上的 `127.0.0.1:8787` 只有本机进程能访问。同一台 VPS 上的其他本地用户能连上这个端口，但仍然需要令牌。
-- 设备入口必须走 TLS。手机端只接受 `wss://`。证书指纹不匹配时进入长退避，并显示服务器出示的指纹供人工核对，**不会自动接受未知证书**。
-- 只转发白名单内的请求头和响应头。`Server-Timing` 由中继重新组装，非数字值会被丢弃，防止响应头注入。
-- 设备暂时离线、超时、处理途中断开时，返回 JSON-RPC 错误（HTTP 200，带原请求 id）。这样 Python MCP SDK 只让这一次调用失败，不会结束整个会话。鉴权失败仍然返回 HTTP 401。
+- The `-client-listen` address must be loopback, or `-client-tls` must be on as well; otherwise it refuses to start. After binding it checks again against the actual address.
+- `127.0.0.1:8787` on the VPS is reachable only by processes on that machine. Other local users on the same VPS can connect to the port but still need the token.
+- The device entry must use TLS. The phone accepts only `wss://`. On a certificate fingerprint mismatch it goes into a long backoff and shows the fingerprint the server presented for manual checking, and **never accepts an unknown certificate automatically**.
+- Only allowlisted request and response headers are forwarded. `Server-Timing` is reassembled by the relay, and non-numeric values are dropped, preventing response header injection.
+- When the device is briefly offline, times out or disconnects mid-request, a JSON-RPC error is returned (HTTP 200, with the original request id). That way the Python MCP SDK fails only this one call and does not end the whole session. Authentication failures still return HTTP 401.
 
-## 7. 仍存在的风险
+## 7. Remaining risks
 
-| 风险 | 说明 | 缓解 |
+| Risk | Notes | Mitigation |
 |---|---|---|
-| 真机后台行为未验证 | 厂商系统、Doze、长时间熄屏、网络切换、开机自启 | 按 [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) 在真机上逐项验证 |
-| Keystore 兼容性 | 个别机型的 Keystore 实现可能有缺陷 | （1.2.1 起）停用远程认证并醒目提示，只有用户明确同意后才进入兼容模式；迁移失败不会丢失配置 |
-| 令牌在 TLS 终止后可见 | 中继能看到 Eve 发来的 Bearer 令牌 | 中继部署在用户自己的 VPS 上，并只监听本机 |
-| 本地端点没有 TLS | `127.0.0.1` 上的同机其他应用可以尝试连接 | 仍然需要令牌；令牌为 256 bit 随机值，使用常量时间比较 |
-| 中继重启时的 Eve 会话 | 本机测试中，同一个会话在中继重启后可以继续使用；真实网络下 HTTP 长连接断开的表现可能不同 | Eve 遇到连接错误时应重新建立会话（见 [EVE_INTEGRATION.md](EVE_INTEGRATION.md)） |
+| Background behaviour on real phones not verified | Vendor systems, Doze, long screen-off periods, network changes, start on boot | Verify item by item on a real phone following [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) |
+| Keystore compatibility | Some models may have a faulty Keystore implementation | (Since 1.2.1) remote authentication is disabled with a prominent notice, and compatibility mode is entered only with the user's explicit consent; a failed migration loses no configuration |
+| The token is visible after TLS termination | The relay can see the Bearer token Eve sends | The relay is deployed on the user's own VPS and listens only locally |
+| The local endpoint has no TLS | Other apps on the same phone can try to connect to `127.0.0.1` | The token is still required; it is a 256-bit random value compared in constant time |
+| Eve sessions across a relay restart | In local tests the same session could keep being used after a relay restart; on a real network, the behaviour when the long-lived HTTP connection drops may differ | Eve should re-establish the session on a connection error (see [VIOLET_INTEGRATION.md](VIOLET_INTEGRATION.md), called EVE_INTEGRATION.md at the time) |

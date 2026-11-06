@@ -1,6 +1,6 @@
 """
 生成安全的完整源码交接包。**不要直接压缩工作目录**：工作目录里有签名私钥（signing/）、.git/、
-Gradle 缓存和构建产物，见 docs/HANDOFF.md。
+Gradle 缓存和构建产物，见 docs/HANDOFF.zh-CN.md。
 
   python tools/make_handoff.py --version 1.3.0
 

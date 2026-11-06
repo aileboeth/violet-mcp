@@ -1,28 +1,30 @@
-# 部署 TLS 中继并接入 Violet（中继 1.2.0 / 手机 Violet MCP 1.3.0）
+# Deploying the TLS relay and connecting Violet (relay 1.2.0 / phone app Violet MCP 1.3.0)
+
+**English** | [简体中文](DEPLOY_RELAY.zh-CN.md)
 
 ```
-Violet ──HTTP 127.0.0.1:8787/mcp──► violet-mcp-relay ◄══wss://VPS:8443/device（TLS，手机主动连出）══ 手机
+Violet ──HTTP 127.0.0.1:8787/mcp──► violet-mcp-relay ◄══wss://VPS:8443/device (TLS, the phone connects out)══ phone
 ```
 
-- 手机主动连接 VPS，不需要手机有公网 IP，也不需要 VPN。
-- 推荐把中继装在 **Violet 所在的机器**上：Violet 访问本机的 `127.0.0.1:8787`，这一段不出机器；只有手机这一段走公网，并且强制 TLS。
-- 默认使用中继自动生成的自签证书，手机端填写证书指纹（certificate pinning），不需要域名。
-- MCP 入口如果配置成非回环地址且没有开 TLS，中继会**拒绝启动**。
+- The phone connects to the VPS itself, so it needs neither a public IP nor a VPN.
+- Installing the relay on **the machine Violet runs on** is recommended: Violet talks to the local `127.0.0.1:8787`, so that leg never leaves the machine; only the phone's leg crosses the internet, and it is always TLS.
+- By default the relay uses a self-signed certificate it generates itself, and the phone enters the certificate fingerprint (certificate pinning), so no domain is needed.
+- If the MCP entry is configured on a non-loopback address without TLS, the relay **refuses to start**.
 
-已经部署过旧版（`eve-mcp-relay` / 手机 `com.mcp.server.eve`）请看 [UPGRADE.md](UPGRADE.md)。全新部署按下面的命令依次执行，只有第 1 步需要改一处。发布文件（`violet-mcp-relay-1.2.0-linux-*`、`violet-mcp-1.3.0-release.apk`）在 GitHub Releases，或用 `tools/package_release.py` 生成到 `dist/v1.3.0/`。
+If you deployed the old version (`eve-mcp-relay` / phone app `com.mcp.server.eve`), see [UPGRADE.md](UPGRADE.md). For a fresh deployment, run the commands below in order; only step 1 needs one edit. The release files (`violet-mcp-relay-1.2.0-linux-*`, `violet-mcp-1.3.0-release.apk`) are on GitHub Releases, or are generated into `dist/v1.3.0/` by `tools/package_release.py`.
 
-## 1. 在 Windows 电脑上上传程序（PowerShell）
+## 1. Upload the program from a Windows computer (PowerShell)
 
 ```powershell
-$VPS = "root@你的VPS地址"   # ← 只改这一处，例如 root@203.0.113.10
-scp dist\v1.3.0\violet-mcp-relay-1.2.0-linux-amd64 dist\v1.3.0\violet-mcp-relay-1.2.0-linux-arm64 relay\deploy\violet-mcp-relay.service "${VPS}:/root/"   # 在仓库目录里执行
+$VPS = "root@your-vps-address"   # ← change only this, e.g. root@203.0.113.10
+scp dist\v1.3.0\violet-mcp-relay-1.2.0-linux-amd64 dist\v1.3.0\violet-mcp-relay-1.2.0-linux-arm64 relay\deploy\violet-mcp-relay.service "${VPS}:/root/"   # run in the repository directory
 ssh $VPS
 ```
 
-## 2. 在 VPS 上安装（root）
+## 2. Install on the VPS (root)
 
 ```bash
-# 确认端口没被占用（没有输出就是空闲）
+# Make sure the ports are free (no output means free)
 ss -ltnp | grep -E ':8443 |:8787 '
 
 mkdir -p /opt/violet-mcp-relay
@@ -33,130 +35,130 @@ systemctl daemon-reload
 systemctl enable --now violet-mcp-relay
 journalctl -u violet-mcp-relay -n 20 --no-pager
 
-# 确认 MCP 入口只监听本机（应显示 127.0.0.1:8787），设备入口监听 8443
+# Check that the MCP entry listens only locally (should show 127.0.0.1:8787) and the device entry on 8443
 ss -ltnp | grep -E ':8443 |:8787 '
 
-# 放行手机连接端口（使用 ufw 时；云服务商的安全组也要放行 TCP 8443）
+# Open the phone's port (when using ufw; the cloud provider's security group must also allow TCP 8443)
 command -v ufw >/dev/null && ufw status | grep -q "Status: active" && ufw allow 8443/tcp
 ```
 
-## 3. 取得手机需要填写的三项
+## 3. Get the three values the phone needs
 
 ```bash
-echo "中继地址:   wss://$(curl -4s https://ifconfig.me):8443/device"
-echo "设备密钥:   $(cat /var/lib/violet-mcp-relay/device.secret)"
-echo "证书指纹:   $(/opt/violet-mcp-relay/violet-mcp-relay -data-dir /var/lib/violet-mcp-relay -print-pin)"
+echo "Relay address:            wss://$(curl -4s https://ifconfig.me):8443/device"
+echo "Device key:               $(cat /var/lib/violet-mcp-relay/device.secret)"
+echo "Certificate fingerprint:  $(/opt/violet-mcp-relay/violet-mcp-relay -data-dir /var/lib/violet-mcp-relay -print-pin)"
 ```
 
-设备密钥只保存在 `/var/lib/violet-mcp-relay/device.secret`（权限 0600），任何日志里都不会出现。
+The device key is stored only in `/var/lib/violet-mcp-relay/device.secret` (mode 0600) and never appears in any log.
 
-## 4. 手机端
+## 4. On the phone
 
-1. 安装 `dist/v1.3.0/violet-mcp-1.3.0-release.apk`，打开 App。
-2. 设置 → 权限 → **使用情况访问权限** → 允许。“电池无限制”可选，建议开启。
-3. 设置 → 远程访问：填入第 3 步的三项 → **保存并应用** → 开启“启用中继连接”。
-4. 设置 → 后台运行：按需开启“开机自启”。部分品牌还需要在手机管家里允许自启动和后台运行。
-5. 主页点 **启动**，确认“远程访问”显示“已连接”。
-6. 打开“工具与权限”，选择要开放给 Violet 的工具（默认只开 5 个不敏感的）。
-7. 打开“安全”，复制访问令牌，下一步要用。
+1. Install `dist/v1.3.0/violet-mcp-1.3.0-release.apk` and open the app.
+2. Settings → Permissions → **Usage access** → allow. "Unrestricted battery" is optional but recommended.
+3. Settings → Remote access: enter the three values from step 3 → **Save and apply** → turn on "Enable relay connection".
+4. Settings → Background: turn on "Start on boot" if you want. Some brands also need auto-start and background running allowed in the phone manager app.
+5. Tap **Start** on the home screen and check that "Remote access" shows "Connected".
+6. Open "Tools & permissions" and choose the tools to share with Violet (by default only 5 non-sensitive ones are on).
+7. Open "Security" and copy the access token; you need it in the next step.
 
-## 5. 在 VPS 上验证
+## 5. Verify on the VPS
 
 ```bash
-curl -s http://127.0.0.1:8787/health; echo      # deviceConnected 应为 true
+curl -s http://127.0.0.1:8787/health; echo      # deviceConnected should be true
 
-TOKEN='粘贴访问令牌'                              # ← 只改这一处
+TOKEN='paste the access token'                  # ← change only this
 curl -s -D - http://127.0.0.1:8787/mcp -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_screen_state","arguments":{}}}' | grep -E 'Server-Timing|screenOn'
 
-# 不带令牌应返回 401
+# Without a token it should return 401
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/mcp -H 'Content-Type: application/json' -d '{}'
 ```
 
-## 6. 接入 Violet
+## 6. Connect Violet
 
-见 [VIOLET_INTEGRATION.md](VIOLET_INTEGRATION.md)。URL 为 `http://127.0.0.1:8787/mcp`，请求头为 `Authorization: Bearer <令牌>`。
+See [VIOLET_INTEGRATION.md](VIOLET_INTEGRATION.md). The URL is `http://127.0.0.1:8787/mcp` and the request header is `Authorization: Bearer <token>`.
 
-### Violet 不在中继所在的机器上时
+### When Violet is not on the relay's machine
 
-不能把 `-client-listen` 改成公网明文地址（中继会拒绝启动）。可选做法：
+You cannot change `-client-listen` to a plain-text public address (the relay refuses to start). Options:
 
-- **推荐**：把中继装到 Violet 所在的机器上。
-- 给中继配正式证书（域名 + Let's Encrypt），让 MCP 入口也走 TLS：
-  1. 修改 service 文件的 `ExecStart`，追加 `-client-listen :8444 -client-tls -tls-cert /etc/violet-mcp-relay/fullchain.pem -tls-key /etc/violet-mcp-relay/privkey.pem`。
-  2. 把证书文件复制到 `/etc/violet-mcp-relay/`。服务以 DynamicUser 运行，读不到 `/etc/letsencrypt/live` 下 root 专属的私钥。
-  3. Violet 使用 `https://你的域名:8444/mcp`。
-  4. 使用正式证书时，手机端“证书指纹”可以留空；证书续期后中继会在一分钟内自动加载新证书。
+- **Recommended**: install the relay on the machine Violet runs on.
+- Give the relay a real certificate (domain + Let's Encrypt), so the MCP entry uses TLS too:
+  1. Edit `ExecStart` in the service file and append `-client-listen :8444 -client-tls -tls-cert /etc/violet-mcp-relay/fullchain.pem -tls-key /etc/violet-mcp-relay/privkey.pem`.
+  2. Copy the certificate files to `/etc/violet-mcp-relay/`. The service runs as a DynamicUser and cannot read the root-only private key under `/etc/letsencrypt/live`.
+  3. Violet uses `https://your-domain:8444/mcp`.
+  4. With a real certificate, the phone's "certificate fingerprint" can be left empty; after the certificate is renewed, the relay loads the new one within a minute.
 
-## 7. 参数
+## 7. Options
 
-| 参数 | 默认 | 说明 |
+| Option | Default | Notes |
 |---|---|---|
-| `-device-listen` | `:8443` | 手机入口（始终 TLS） |
-| `-client-listen` | `127.0.0.1:8787` | Violet 入口；非回环地址必须配 `-client-tls`，否则拒绝启动 |
-| `-request-timeout` | `20s` | 等待手机响应的上限（1s–120s）。默认值小于 Python SDK 的 30 秒 HTTP 超时，Violet 能拿到明确原因 |
-| `-offline-wait` | `5s` | 手机暂时离线（例如正在切换网络）时，请求最多等待多久（0–30s） |
-| `-ping-interval` | `30s` | 中继向手机发心跳的间隔（10s–10m）。越短越快发现断线，熄屏时也越费手机电量 |
-| `-read-timeout` | 3 × 心跳间隔 | 超过这个时间收不到手机任何数据就断开 |
-| `-log-level` | `info` | `debug` / `info` / `warn`；任何级别都不记录令牌和请求内容 |
-| `-print-pin` / `-pin-of 文件` | — | 打印当前证书 / 指定证书文件的公钥指纹 |
+| `-device-listen` | `:8443` | Phone entry (always TLS) |
+| `-client-listen` | `127.0.0.1:8787` | Violet entry; a non-loopback address requires `-client-tls`, otherwise the relay refuses to start |
+| `-request-timeout` | `20s` | Longest wait for the phone's response (1s–120s). The default is below the Python SDK's 30-second HTTP timeout, so Violet gets a clear reason |
+| `-offline-wait` | `5s` | How long a request waits at most while the phone is briefly offline (e.g. switching networks) (0–30s) |
+| `-ping-interval` | `30s` | Interval of the relay's heartbeat to the phone (10s–10m). Shorter detects disconnects faster, but uses more phone battery with the screen off |
+| `-read-timeout` | 3 × heartbeat interval | Disconnect when no data at all arrives from the phone for longer than this |
+| `-log-level` | `info` | `debug` / `info` / `warn`; no level ever logs tokens or request content |
+| `-print-pin` / `-pin-of FILE` | — | Print the public key fingerprint of the current certificate / a given certificate file |
 
-修改参数：编辑 `/etc/systemd/system/violet-mcp-relay.service` 的 `ExecStart` 行，然后执行 `systemctl daemon-reload && systemctl restart violet-mcp-relay`。
+To change options: edit the `ExecStart` line of `/etc/systemd/system/violet-mcp-relay.service`, then run `systemctl daemon-reload && systemctl restart violet-mcp-relay`.
 
-## 8. 更换证书（不中断、不盲信新证书）
+## 8. Changing the certificate (no interruption, no blind trust in the new certificate)
 
-手机最多可以同时保存 3 个证书指纹。换证书的顺序如下：
+The phone can store up to 3 certificate fingerprints at once. Change the certificate in this order:
 
 ```bash
-# 1) 在 VPS 上生成新证书（示例：新的自签证书），先不要替换正在使用的证书
+# 1) Generate a new certificate on the VPS (example: a new self-signed one); don't replace the one in use yet
 cd /var/lib/violet-mcp-relay
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
   -subj "/CN=violet-mcp-relay" -keyout new.key -out new.crt
-/opt/violet-mcp-relay/violet-mcp-relay -pin-of new.crt          # 记下新指纹
+/opt/violet-mcp-relay/violet-mcp-relay -pin-of new.crt          # note the new fingerprint
 ```
 
-2. 在手机上：设置 → 证书指纹，在旧指纹下**另起一行**粘贴新指纹 → 保存并应用。此时新旧证书都能连接。
-3. 在 VPS 上切换证书：
+2. On the phone: Settings → Certificate fingerprint, paste the new fingerprint **on a new line** below the old one → Save and apply. Now both the old and new certificate can connect.
+3. Switch the certificate on the VPS:
 
 ```bash
 cd /var/lib/violet-mcp-relay
 mv selfsigned.crt old.crt && mv selfsigned.key old.key
 mv new.crt selfsigned.crt && mv new.key selfsigned.key
-chown --reference=old.key selfsigned.crt selfsigned.key   # 服务以 DynamicUser 运行，新文件要交给同一个属主
+chown --reference=old.key selfsigned.crt selfsigned.key   # the service runs as a DynamicUser, so the new files need the same owner
 chmod 600 selfsigned.key
 systemctl restart violet-mcp-relay
-journalctl -u violet-mcp-relay -n 5 --no-pager | grep "certificate pin"   # 应显示新指纹
+journalctl -u violet-mcp-relay -n 5 --no-pager | grep "certificate pin"   # should show the new fingerprint
 ```
 
-4. 手机重新连上后，在设置中删掉旧指纹那一行。
+4. Once the phone has reconnected, delete the old fingerprint line in the settings.
 
-如果手机提示“证书指纹不匹配”，而你**没有**更换过证书，不要更新指纹：这可能说明连接被拦截。
-安全页会显示服务器出示的指纹，请先用 `-print-pin` 在 VPS 上核对。
+If the phone says "certificate fingerprint mismatch" and you have **not** changed the certificate, do not update the fingerprint: this may mean the connection is being intercepted.
+The Security page shows the fingerprint the server presented; check it on the VPS with `-print-pin` first.
 
-## 9. 运维
+## 9. Operations
 
 ```bash
-journalctl -u violet-mcp-relay -f                 # 每个请求一行：状态码、total/rtt/phone/tool 耗时
-curl -s http://127.0.0.1:8787/health; echo      # 设备是否在线、最近一次请求、最近一次断开原因
-systemctl restart violet-mcp-relay                 # 重启后手机会自动重连
+journalctl -u violet-mcp-relay -f                 # one line per request: status code, total/rtt/phone/tool timings
+curl -s http://127.0.0.1:8787/health; echo      # whether the device is online, the latest request, the latest disconnect reason
+systemctl restart violet-mcp-relay                 # the phone reconnects automatically after a restart
 
-# 更换设备密钥（之后在手机上填新密钥）
+# Change the device key (then enter the new key on the phone)
 systemctl stop violet-mcp-relay && rm /var/lib/violet-mcp-relay/device.secret && systemctl start violet-mcp-relay
 cat /var/lib/violet-mcp-relay/device.secret
 
-# 卸载
+# Uninstall
 systemctl disable --now violet-mcp-relay && rm -rf /opt/violet-mcp-relay /etc/systemd/system/violet-mcp-relay.service /var/lib/private/violet-mcp-relay
 ```
 
-## 安全要点
+## Security essentials
 
-| 要求 | 实现 |
+| Requirement | Implementation |
 |---|---|
-| 必须身份认证 | 手机→中继用设备密钥（只比较 SHA-256，常量时间）；Violet→中继→手机用 MCP Bearer 令牌：中继按手机上报的令牌哈希先拦截，手机再校验一次 |
-| 未认证不暴露工具 | 中继没有任何工具或工具清单；未认证请求在中继就返回 401，不会转发到手机 |
-| 不安全监听 | 非回环地址且未开 TLS 时拒绝启动；绑定后再按实际地址检查一次 |
-| 日志不含令牌 | 只记录方法、路径、状态码和各阶段耗时；设备密钥只写入 0600 文件 |
-| 断线重连 | 中继每 30 秒发一次心跳，90 秒收不到数据就断开；手机按 1→60 秒指数退避（±20% 抖动）重连；网络切换时立即重连；没有网络时暂停重试 |
-| 超时可控 | 请求超时、离线等待、心跳、读超时都可以配置；请求超时后中继会探测连接，5 秒内没有回应就断开 |
-| TLS | 手机只接受 `wss://`；自签证书靠指纹固定，正式证书按系统 CA 和主机名校验；不会自动接受未知证书 |
+| Authentication required | Phone → relay with the device key (only SHA-256 compared, in constant time); Violet → relay → phone with the MCP Bearer token: the relay first blocks by the token hash the phone reported, and the phone checks again |
+| No tools exposed without authentication | The relay has no tools or tool list at all; unauthenticated requests get 401 at the relay and are never forwarded to the phone |
+| No insecure listening | Refuses to start on a non-loopback address without TLS; checks again against the actual address after binding |
+| No tokens in logs | Only method, path, status code and per-stage timings are logged; the device key is written only to a 0600 file |
+| Reconnecting after disconnects | The relay sends a heartbeat every 30 seconds and disconnects after 90 seconds without data; the phone reconnects with exponential backoff 1→60 seconds (±20% jitter); immediately when the network changes; retries pause without a network |
+| Controllable timeouts | Request timeout, offline wait, heartbeat and read timeout are all configurable; after a request timeout the relay probes the connection and disconnects if there is no answer within 5 seconds |
+| TLS | The phone accepts only `wss://`; self-signed certificates are pinned by fingerprint, real certificates are checked against the system CAs and hostname; unknown certificates are never accepted automatically |

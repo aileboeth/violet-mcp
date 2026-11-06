@@ -1,83 +1,85 @@
-# 源码交接与全新环境构建
+# Source handoff and building in a clean environment
 
-## 1. 不要直接压缩工作目录
+**English** | [简体中文](HANDOFF.zh-CN.md)
 
-开发者的工作目录里有以下内容，**任何一样都不能交出去**：
+## 1. Do not just zip up the working directory
 
-| 内容 | 为什么不能交 |
+A developer's working directory contains the following, and **none of it may be handed over**:
+
+| Contents | Why it must not be handed over |
 |---|---|
-| `signing/`：签名私钥 `*.jks`、口令文件 `rotation.properties`、轮换证明 `lineage-*.bin` | 拿到私钥和口令的人可以签出“合法更新”，覆盖安装并读取 App 数据（见 [SIGNING_KEY_INCIDENT.md](SIGNING_KEY_INCIDENT.md)） |
-| `.git/` | 完整历史，可能包含曾经误加入又删除的内容 |
-| `local.properties` | 本机路径 |
-| `.gradle/`、`.kotlin/`、`*/build/`、`dist/` | 缓存和构建产物，体积大，也可能残留中间文件 |
+| `signing/`: signing private keys `*.jks`, the password file `rotation.properties`, rotation proofs `lineage-*.bin` | Anyone with the private key and password can sign a "legitimate update", install it over the app and read its data (see [SIGNING_KEY_INCIDENT.md](SIGNING_KEY_INCIDENT.md)) |
+| `.git/` | The full history, which may contain things added by mistake and later deleted |
+| `local.properties` | Local paths |
+| `.gradle/`, `.kotlin/`, `*/build/`, `dist/` | Caches and build output: large, and may hold leftover intermediate files |
 
-2026-10-10 发生过一次：把整个工作目录直接压缩成 `mcp-server.zip` 交了出去，其中包含签名私钥和口令，随后已轮换密钥（记录见 SIGNING_KEY_INCIDENT.md §6）。
+It happened once on 2026-10-10: the whole working directory was zipped into `mcp-server.zip` and handed over, including the signing private key and password; the key was rotated afterwards (record in SIGNING_KEY_INCIDENT.md §6).
 
-## 2. 生成交接包（唯一推荐方式）
+## 2. Creating a handoff package (the only recommended way)
 
 ```bash
 python tools/make_handoff.py --version 1.3.0
-# 输出：dist/handoff/violet-mcp-1.3.0-source-handoff.zip
-#       dist/handoff/violet-mcp-1.3.0-source-handoff.scan.json（扫描报告）
+# Output: dist/handoff/violet-mcp-1.3.0-source-handoff.zip
+#         dist/handoff/violet-mcp-1.3.0-source-handoff.scan.json (scan report)
 ```
 
-脚本做以下几件事：
+The script does the following:
 
-1. **选文件**：只取 git 已跟踪的文件和未被 `.gitignore` 排除的新文件，然后按两份黑名单再过滤一遍。
-2. **写清单**：生成 `HANDOFF_MANIFEST.txt`，记录每个文件的 SHA-256。
-3. **扫描**：对**生成的 ZIP 本身**做递归安全扫描。检查范围覆盖 ZIP 里每个文件，以及嵌套的 zip、jar、apk、tar、gz：
-   - 禁止的文件名和目录；
-   - PEM 私钥、JKS / PKCS#12 密钥库；
-   - 口令配置行；
-   - 常见云服务和 API 令牌格式；
-   - 与本机真实密钥文件逐字节比对、本机真实口令的字面匹配。
+1. **Selects files**: takes only files tracked by git and new files not excluded by `.gitignore`, then filters again with two blocklists.
+2. **Writes a manifest**: generates `HANDOFF_MANIFEST.txt` with the SHA-256 of every file.
+3. **Scans**: runs a recursive security scan on **the generated ZIP itself**, covering every file in the ZIP and nested zip, jar, apk, tar and gz files:
+   - forbidden file and directory names;
+   - PEM private keys, JKS / PKCS#12 keystores;
+   - password configuration lines;
+   - common cloud service and API token formats;
+   - byte-for-byte comparison with the real key files on the machine, and literal matching of the real passwords on the machine.
 
-   任何一项不通过，就删除 ZIP。
+   If anything fails, the ZIP is deleted.
 
-**手动复查**任意交接包：
+**Re-check** any handoff package by hand:
 
 ```bash
-python -I -X utf8 tests/check_release_artifacts.py --handoff 交接包.zip
+python -I -X utf8 tests/check_release_artifacts.py --handoff handoff-package.zip
 ```
 
-## 3. 在全新环境中构建
+## 3. Building in a clean environment
 
-需要：
+Needed:
 
 - JDK 17
-- Android SDK（platform 35、build-tools 35）
+- Android SDK (platform 35, build-tools 35)
 - Go 1.23+
-- Python 3.10+（只有测试会用到）
+- Python 3.10+ (only for the tests)
 
 ```bash
 unzip violet-mcp-1.3.0-source-handoff.zip && cd violet-mcp-1.3.0
-grep -v '^#' HANDOFF_MANIFEST.txt | sha256sum -c --quiet && echo 清单校验通过   # 校验文件完整性
+grep -v '^#' HANDOFF_MANIFEST.txt | sha256sum -c --quiet && echo manifest OK   # verify file integrity
 
-cp config-templates/local.properties.example local.properties    # 改成本机 SDK 路径
+cp config-templates/local.properties.example local.properties    # change to the local SDK path
 ./gradlew :mcp-core:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
-# 没有签名配置时 release 包不签名（DOES NOT VERIFY 属于预期）
+# Without a signing configuration the release APK is unsigned (DOES NOT VERIFY is expected)
 
 cd relay && go vet ./... && go test ./... \
   && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o violet-mcp-relay-linux-amd64 .
 ```
 
-Windows 提示：路径中不能有中文。如果用户目录含中文，设置 `GRADLE_USER_HOME` 为纯英文路径。
+Windows tip: paths must not contain non-ASCII characters. If your user folder name does, set `GRADLE_USER_HOME` to an ASCII-only path.
 
-需要代理才能下载依赖时：Gradle 不读取 `HTTP_PROXY` 环境变量，请用 `JAVA_TOOL_OPTIONS="-Dhttps.proxyHost=… -Dhttps.proxyPort=… -Dhttp.proxyHost=… -Dhttp.proxyPort=…"` 或 `~/.gradle/gradle.properties` 中的 `systemProp.https.proxyHost` 等设置。
+When dependencies can only be downloaded through a proxy: Gradle does not read the `HTTP_PROXY` environment variable; use `JAVA_TOOL_OPTIONS="-Dhttps.proxyHost=… -Dhttps.proxyPort=… -Dhttp.proxyHost=… -Dhttp.proxyPort=…"` or settings such as `systemProp.https.proxyHost` in `~/.gradle/gradle.properties`.
 
-**一键验证**（解压到全新目录、使用全新的 Gradle / Go 缓存、跑测试和构建、用一次性密钥验证签名模板）：
+**One-step verification** (unpacks into a fresh directory, uses fresh Gradle / Go caches, runs tests and builds, and checks the signing templates with a throwaway key):
 
 ```bash
-bash tests/verify_handoff_build.sh 交接包.zip <Android SDK 路径> <纯英文的空工作目录>
+bash tests/verify_handoff_build.sh handoff-package.zip <Android SDK path> <empty ASCII-only work directory>
 ```
 
-## 4. 签名
+## 4. Signing
 
-交接包里**不含任何真实密钥**，只有 `config-templates/` 中的模板。
+The handoff package **contains no real keys**, only the templates in `config-templates/`.
 
-| 场景 | 做法 |
+| Situation | What to do |
 |---|---|
-| 自己构建、自己安装（分支项目） | 复制 `config-templates/keystore.properties.example` 为 `signing/keystore.properties`，填写自己生成的密钥。签出的 APK 不能覆盖安装官方版本，需要先卸载 |
-| 官方版本发布（只有持有密钥的维护者） | 把离线保存的密钥放回 `signing/`，复制 `config-templates/rotation.properties.example` 为 `signing/rotation.properties` 并填写口令；`gradlew :app:assembleRelease` 产出未签名包，再运行 `python tools/sign_release.py <apk>` 用 v1 + v2 + lineage 签名并自动校验 |
+| Building and installing yourself (a fork) | Copy `config-templates/keystore.properties.example` to `signing/keystore.properties` and fill in a key you generated yourself. APKs signed this way cannot be installed over the official version; uninstall it first |
+| Releasing the official version (only the maintainer who holds the key) | Put the offline key back into `signing/`, copy `config-templates/rotation.properties.example` to `signing/rotation.properties` and fill in the password; `gradlew :app:assembleRelease` produces an unsigned package, then run `python tools/sign_release.py <apk>` to sign with v1 + v2 + lineage and verify automatically |
 
-两个文件不能同时存在，否则 Gradle 会直接报错。这是为了防止只用旧密钥签名：已经升级到轮换版本的手机会拒绝这样的更新。
+The two files may not exist at the same time, otherwise Gradle fails right away. This prevents signing with only the old key: phones already upgraded to the rotated version would refuse such an update.

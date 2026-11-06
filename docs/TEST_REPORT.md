@@ -1,306 +1,308 @@
-# 测试报告
+# Test report
 
-## Violet MCP 1.4.2（中继 1.2.0 不变）— 2026-11-03
+**English** | [简体中文](TEST_REPORT.zh-CN.md)
 
-同时连最多 3 个中继服务器（用户选上限 3、设置页“服务器卡片列表”）：每个开着的位置一个 `RelayClient`，共用同一个
-`McpEndpoint` 和访问令牌；位置 1 沿用 1.4.x 的键，升级后原配置就是“服务器 1”，设备密钥不迁移；改一个服务器只重建那一条
-连接。设置页新卡片 `RelayServersCard.kt`；主页、诊断、安全页按服务器分行；`health` 不透露其他服务器的地址。工具、
-鉴权、中继协议没有变化。
+## Violet MCP 1.4.2 (relay 1.2.0 unchanged) — 2026-11-03
 
-| 测试 | 结果 |
+Up to 3 relay servers connected at once (the user chose a limit of 3 and a "server card list" on the settings page): one `RelayClient` per enabled slot, all sharing the same
+`McpEndpoint` and access token; slot 1 keeps the 1.4.x keys, so after upgrading the old configuration becomes "server 1", and the device key is not migrated; changing one server rebuilds only that
+connection. New settings card `RelayServersCard.kt`; the home, diagnostics and security pages show one row per server; `health` does not reveal other servers' addresses. Tools,
+authentication and the relay protocol are unchanged.
+
+| Test | Result |
 |---|---|
-| mcp-core + Robolectric（`:mcp-core:test :app:testDebugUnitTest --offline`，**模拟**） | 通过，131/131（73 + 58；新增 `MultiRelayTest` 5 项：1.4.x 配置成为服务器 1、三个服务器各自的密钥、开关互不影响、删除一个不动其他、撤销 / 清除覆盖所有服务器） |
-| 界面截图（Robolectric 原生绘图，**模拟**，临时测试未留在仓库） | 看过：折叠、展开编辑、深色、两个服务器 + “添加服务器” |
-| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.2-{debug,release}.apk`，versionCode 9 |
-| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项 |
-| 签名（`tools/sign_release.py`，用户“可以继续吧”） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.4.1 相同），Android 8.x 为旧证书，lineage 旧 → 新 |
-| 发布包（`tools/package_release.py --version 1.4.2 --relay-version 1.2.0`） | 通过：`dist/v1.4.2/`，发布产物和交接包扫描问题 0 个 |
-| 真机（多条中继同时在线、断网 / 切网时各自重连、耗电） | 无法验证（没有设备） |
+| mcp-core + Robolectric (`:mcp-core:test :app:testDebugUnitTest --offline`, **simulated**) | Pass, 131/131 (73 + 58; 5 new `MultiRelayTest` cases: the 1.4.x configuration becomes server 1, each of three servers has its own key, switches don't affect each other, deleting one leaves the others, revoke / clear cover all servers) |
+| UI screenshots (Robolectric native rendering, **simulated**, temporary test not kept in the repository) | Checked: collapsed, expanded for editing, dark theme, two servers + "Add server" |
+| `:app:assembleDebug` / `:app:assembleRelease` (R8) | Pass; artifacts `violet-mcp-1.4.2-{debug,release}.apk`, versionCode 9 |
+| Static APK check (`tests/verify_apk.py`, debug package) | Pass, 0 failures |
+| Signing (`tools/sign_release.py`, the user said "go ahead") | Pass: Android 9+ signer `d5a5eeec…` (same as 1.4.1), the old certificate for Android 8.x, lineage old → new |
+| Release package (`tools/package_release.py --version 1.4.2 --relay-version 1.2.0`) | Pass: `dist/v1.4.2/`, 0 problems in the release artifact and handoff package scans |
+| Real device (several relays online at once, each reconnecting on its own after losing / switching networks, power use) | Cannot be verified (no device) |
 
-## Violet MCP 1.4.1（中继 1.2.0 不变）— 2026-11-03
+## Violet MCP 1.4.1 (relay 1.2.0 unchanged) — 2026-11-03
 
-新增 7 个只读“生活状态”工具（`next_alarm`、`now_playing`、`audio_output`、`network_state`、`step_count`、
-`calendar_events`、`phone_events`），“工具与权限”页改成中文名 + 大白话说明（`ToolKit.PLAIN`），“去授权”按权限类型
-弹系统请求或打开系统设置。新增权限 `ACTIVITY_RECOGNITION`、`READ_CALENDAR`、`ACCESS_FINE_LOCATION` /
-`ACCESS_COARSE_LOCATION`（可选），新增只能由系统绑定的 `MediaListenerService`（通知使用权，不处理通知）。
-鉴权、中继逻辑没有变化；“手机上的动静”由 Violet 每分钟取一次，不经中继推送。
+Adds 7 read-only "life state" tools (`next_alarm`, `now_playing`, `audio_output`, `network_state`, `step_count`,
+`calendar_events`, `phone_events`); the "Tools & permissions" page shows plain names + plain-language explanations (`ToolKit.PLAIN`), and "Grant" brings up the system request
+or opens the system settings depending on the permission type. New permissions `ACTIVITY_RECOGNITION`, `READ_CALENDAR`, `ACCESS_FINE_LOCATION` /
+`ACCESS_COARSE_LOCATION` (optional), and a new `MediaListenerService` that only the system can bind (notification access, handles no notifications).
+Authentication and relay logic are unchanged; "phone events" are fetched by Violet once a minute, not pushed through the relay.
 
-| 测试 | 结果 |
+| Test | Result |
 |---|---|
-| mcp-core + Robolectric（`:mcp-core:test :app:testDebugUnitTest --offline`，**模拟**） | 通过，126/126（新增 `LifeToolsTest` 6 项：闹钟 / 耳机默认开且有结果、没系统权限时拒绝不猜、Wi-Fi 名称不外传、步数跨零点和重启接得上、动静按序号取、每个工具都有大白话说明；`HardeningTest` 默认开启集合加入 `next_alarm`、`audio_output`） |
-| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.1-{debug,release}.apk`，versionCode 8 |
-| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项；权限白名单加入上面 4 个权限 |
-| 签名（`tools/sign_release.py`，用户“先全部做完”） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.4.0 相同，可以覆盖安装 / 应用内更新），Android 8.x 为旧证书，lineage 旧 → 新 |
-| 发布包（`tools/package_release.py --version 1.4.1 --relay-version 1.2.0`） | 通过：`dist/v1.4.1/`，发布产物和交接包扫描问题 0 个 |
-| 真机（步数、正在播放、日历、Wi-Fi 起名、动静记录、各权限弹窗） | 无法验证（没有设备）；Wi-Fi 识别只在 Android 12+ 有效 |
+| mcp-core + Robolectric (`:mcp-core:test :app:testDebugUnitTest --offline`, **simulated**) | Pass, 126/126 (6 new `LifeToolsTest` cases: alarm / headphones on by default with results, refusal without guessing when the system permission is missing, the Wi-Fi name never leaves the phone, steps carry over midnight and reboots, events fetched by sequence number, every tool has a plain-language explanation; `HardeningTest`'s default-on set adds `next_alarm` and `audio_output`) |
+| `:app:assembleDebug` / `:app:assembleRelease` (R8) | Pass; artifacts `violet-mcp-1.4.1-{debug,release}.apk`, versionCode 8 |
+| Static APK check (`tests/verify_apk.py`, debug package) | Pass, 0 failures; the permission allowlist adds the 4 permissions above |
+| Signing (`tools/sign_release.py`, the user said "finish everything first") | Pass: Android 9+ signer `d5a5eeec…` (same as 1.4.0, so it installs over it / updates in-app), the old certificate for Android 8.x, lineage old → new |
+| Release package (`tools/package_release.py --version 1.4.1 --relay-version 1.2.0`) | Pass: `dist/v1.4.1/`, 0 problems in the release artifact and handoff package scans |
+| Real device (steps, now playing, calendar, Wi-Fi naming, event records, each permission dialog) | Cannot be verified (no device); Wi-Fi recognition only works on Android 12+ |
 
-## Violet MCP 1.4.0（中继 1.2.0 不变）— 2026-10-27
+## Violet MCP 1.4.0 (relay 1.2.0 unchanged) — 2026-10-27
 
-新增应用内更新（`mcp-core` 的 `com.mcp.server.update.UpdateChecker`、App 的 `AppUpdater` / `UpdateInstallReceiver`、设置页“应用更新”、主页提示），新增权限 `REQUEST_INSTALL_PACKAGES`。工具、鉴权、中继逻辑没有变化。
+Adds in-app updates (`com.mcp.server.update.UpdateChecker` in `mcp-core`, the app's `AppUpdater` / `UpdateInstallReceiver`, "App updates" on the settings page, a notice on the home screen), and the new permission `REQUEST_INSTALL_PACKAGES`. Tools, authentication and relay logic are unchanged.
 
-| 测试 | 结果 |
+| Test | Result |
 |---|---|
-| mcp-core 单元测试（`:mcp-core:test --offline`） | 通过，73/73（新增 `UpdateCheckerTest` 9 项：找安装包和校验文件、SHA-256 不一致时删除、缺附件 / 非版本号拒绝、只连白名单主机且在连接前检查、跳转到其他主机被拒绝、默认只用 https 访问 GitHub、两种校验文件格式、版本比较） |
-| Robolectric（`:app:testDebugUnitTest`，**模拟**） | 通过，47/47（新增 `AppUpdaterTest` 9 项：默认自动 / 手动不自己检查、6 小时间隔、只提醒不下载、不是本应用签名安装包的下载被删除且不安装、自动模式自己下载、失败原因保存、重启后仍显示结果、签名证书链规则、安装失败显示） |
-| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.0-{debug,release}.apk` |
-| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项。权限白名单加入 `REQUEST_INSTALL_PACKAGES`；写 / 删文件只允许 `com/mcp/server/update/` 和 `AppUpdater`；新增检查“PackageInstaller 只出现在应用更新里”“更新结果接收器不导出”；工具与协议核心仍不允许写文件 |
-| 签名（`tools/sign_release.py`，用户同意） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.3.0 相同，可以覆盖安装），Android 8.x 为旧证书，lineage 旧 → 新 |
-| 发布包（`tools/package_release.py --version 1.4.0 --relay-version 1.2.0`） | 通过：`dist/v1.4.0/`，发布产物和交接包扫描问题 0 个；`aapt2 badging`：versionCode 7、1.4.0、带 `REQUEST_INSTALL_PACKAGES`；SHA256SUMS.txt 为应用更新需要的 `<sha256> *<文件名>` 格式 |
-| 真机（安装、系统确认、更新后服务恢复） | 无法验证（没有设备），见 DEVICE_CHECKLIST U 节 |
+| mcp-core unit tests (`:mcp-core:test --offline`) | Pass, 73/73 (9 new `UpdateCheckerTest` cases: finding the package and checksum file, deleting on SHA-256 mismatch, refusing missing assets / non-version tags, connecting only to allowlisted hosts and checking before connecting, refusing redirects to other hosts, GitHub accessed only over https by default, both checksum file formats, version comparison) |
+| Robolectric (`:app:testDebugUnitTest`, **simulated**) | Pass, 47/47 (9 new `AppUpdaterTest` cases: automatic by default / manual mode never checks by itself, 6-hour interval, notify-only does not download, a download that is not a package signed by this app is deleted and not installed, automatic mode downloads by itself, failure reasons saved, results still shown after a restart, signing certificate chain rule, install failure shown) |
+| `:app:assembleDebug` / `:app:assembleRelease` (R8) | Pass; artifacts `violet-mcp-1.4.0-{debug,release}.apk` |
+| Static APK check (`tests/verify_apk.py`, debug package) | Pass, 0 failures. The permission allowlist adds `REQUEST_INSTALL_PACKAGES`; writing / deleting files is allowed only in `com/mcp/server/update/` and `AppUpdater`; new checks "PackageInstaller appears only in app updates" and "the update result receiver is not exported"; the tools and protocol core still may not write files |
+| Signing (`tools/sign_release.py`, with the user's consent) | Pass: Android 9+ signer `d5a5eeec…` (same as 1.3.0, so it installs over it), the old certificate for Android 8.x, lineage old → new |
+| Release package (`tools/package_release.py --version 1.4.0 --relay-version 1.2.0`) | Pass: `dist/v1.4.0/`, 0 problems in the release artifact and handoff package scans; `aapt2 badging`: versionCode 7, 1.4.0, with `REQUEST_INSTALL_PACKAGES`; SHA256SUMS.txt in the `<sha256> *<file name>` format the app updater needs |
+| Real device (installing, system confirmation, service recovery after updating) | Cannot be verified (no device); see DEVICE_CHECKLIST section U |
 
-## Violet MCP 1.3.0（中继 1.2.0）— 2026-10-27
+## Violet MCP 1.3.0 (relay 1.2.0) — 2026-10-27
 
-只改名（应用名、包名 `com.mcp.server.violet`、产物名、中继名和环境变量），工具和安全逻辑没有变化。
+Only renames (app name, package name `com.mcp.server.violet`, artifact names, relay name and environment variable); tools and security logic are unchanged.
 
-| 测试 | 结果 |
+| Test | Result |
 |---|---|
-| mcp-core 单元测试（`:mcp-core:test --offline`） | 通过，64/64 |
-| Go 中继 `go vet` / `go test -count=1 ./...` | 通过，20/20（新增 `TestDeviceSecretEnvironmentNewAndOldName`：旧环境变量 `EVE_RELAY_DEVICE_SECRET` 仍可用，新名优先） |
-| 与 Violet 的静态契约（14 个工具三方一致、全部只读） | 通过 |
-| Robolectric（`:app:testDebugUnitTest`，**模拟**） | 通过，38/38 |
-| `:app:assembleDebug` / `:app:assembleRelease` | 通过；`aapt2 dump badging`：`com.mcp.server.violet`、versionCode 6、1.3.0、应用名“Violet MCP” |
-| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项 |
-| 签名（`tools/sign_release.py`，用户同意） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.2.2 相同的轮换后密钥），Android 8.x 为旧证书，lineage 旧 → 新 |
-| 发布包（`tools/package_release.py --version 1.3.0 --relay-version 1.2.0`） | 通过：`dist/v1.3.0/`（APK、中继 linux-amd64 / arm64、源码交接包、SHA256SUMS），发布产物和交接包扫描问题 0 个 |
-| PC 端到端 | 未执行 |
-| 真机 | 无法验证（没有设备） |
+| mcp-core unit tests (`:mcp-core:test --offline`) | Pass, 64/64 |
+| Go relay `go vet` / `go test -count=1 ./...` | Pass, 20/20 (new `TestDeviceSecretEnvironmentNewAndOldName`: the old environment variable `EVE_RELAY_DEVICE_SECRET` still works, the new name takes precedence) |
+| Static contract with Violet (the 14 tools agree on all three sides, all read-only) | Pass |
+| Robolectric (`:app:testDebugUnitTest`, **simulated**) | Pass, 38/38 |
+| `:app:assembleDebug` / `:app:assembleRelease` | Pass; `aapt2 dump badging`: `com.mcp.server.violet`, versionCode 6, 1.3.0, app name "Violet MCP" |
+| Static APK check (`tests/verify_apk.py`, debug package) | Pass, 0 failures |
+| Signing (`tools/sign_release.py`, with the user's consent) | Pass: Android 9+ signer `d5a5eeec…` (the same rotated key as 1.2.2), the old certificate for Android 8.x, lineage old → new |
+| Release package (`tools/package_release.py --version 1.3.0 --relay-version 1.2.0`) | Pass: `dist/v1.3.0/` (APK, relay linux-amd64 / arm64, source handoff package, SHA256SUMS), 0 problems in the release artifact and handoff package scans |
+| PC end-to-end | Not run |
+| Real device | Cannot be verified (no device) |
 
-## 1.2.2-eve（中继 1.1.0，未改动）— 2026-10-10
+## 1.2.2-eve (relay 1.1.0, unchanged) — 2026-10-10
 
-本轮修改：
+This round's changes:
 
-- 签名密钥轮换（APK Signature Scheme v3 lineage）；
-- 新增安全的源码交接打包（`tools/make_handoff.py`）和交接包扫描（`check_release_artifacts.py --handoff`）；
-- 新增签名脚本 `tools/sign_release.py` 和签名配置模板；
-- App 和中继**没有功能改动**，只把版本号改为 1.2.2-eve / versionCode 5。
+- signing key rotation (APK Signature Scheme v3 lineage);
+- new safe source handoff packaging (`tools/make_handoff.py`) and handoff package scanning (`check_release_artifacts.py --handoff`);
+- new signing script `tools/sign_release.py` and signing configuration templates;
+- **no functional changes** to the app or relay; only the version number changed to 1.2.2-eve / versionCode 5.
 
-下表的结果都是本轮在最终代码上**实际执行**得到的。
+Every result in the table below was **actually run** on the final code this round.
 
-| 测试 | 命令 | 结果 |
+| Test | Command | Result |
 |---|---|---|
-| `mcp-core` 单元测试 | `gradlew :mcp-core:test --rerun-tasks` | **64/64 通过** |
-| Android 单元测试（Robolectric，**模拟环境**） | `gradlew :app:testDebugUnitTest --rerun-tasks` | **38/38 通过** |
-| Go 中继 | `go vet ./... && go test -count=1 ./...` | **19/19 通过** |
-| Python MCP SDK 1.30.0 端到端 | `tests/run_pc_e2e.sh` | 经中继 **41/41**，直连 **41/41**，稳定性 **11/11**；不安全监听配置拒绝启动；relay.log / harness.log 中没有令牌和设备密钥 |
-| APK 静态检查 | `tests/verify_apk.py` | debug 包 **45/45 通过**；release 包只有“检查对象是否未混淆”这一项按预期失败（与 1.2.1 相同） |
-| 发布 APK 签名 | `apksigner verify -v --min-sdk-version 26` | 通过（v2 + v3）。Android 9+ 看到的签名者为新证书 `d5a5eeec…15ea`，Android 8.x 看到的为旧证书 `52f602d3…b499`；APK 内嵌 lineage 为 旧 → 新。`aapt2` 显示 versionCode 5 / versionName 1.2.2-eve |
-| Gradle 签名保护 | `signing/` 中同时放 `rotation.properties` 和 `keystore.properties` | 构建直接失败并提示原因，防止只用旧密钥签名 |
-| lineage 文件丢失后的恢复 | `apksigner sign --lineage <已发布的 1.2.2 APK>` | 签出的 APK 带有完整的 2 级 lineage |
-| **全新环境构建**（交接包） | `tests/verify_handoff_build.sh <交接包> <SDK> D:/Claude/.handoff-fresh` | **全部通过**，详见下方 |
-| 交接包扫描（**ZIP 本身**） | `make_handoff.build()` → `check_release_artifacts.py --handoff` | 0 个问题，详见下方 |
-| 发布目录扫描 | `check_release_artifacts.py dist/v1.2.2-eve` | 0 个问题 |
-| 历史产物复查 | `check_release_artifacts.py dist`；各目录 `sha256sum -c` | 0 个问题；1.1.0（dist 根目录）、1.2.0、1.2.1 的产物校验和全部一致，**未被覆盖** |
-| 扫描器自检 | 在临时 zip 中植入真实密钥（改名后放进 zip 内的 jar）、真实口令（放进 zip 内的 tar.gz）、`sk-ant-` 格式的密钥、`.git/`、`build/` | 全部检出；干净的 zip 通过 |
-| 防覆盖 | 对已存在的 `dist/v1.2.2-eve` 再次运行 `package_release.py`；对已存在的交接包再次调用 `make_handoff.build()` | 都拒绝执行，原文件不变 |
+| `mcp-core` unit tests | `gradlew :mcp-core:test --rerun-tasks` | **64/64 pass** |
+| Android unit tests (Robolectric, **simulated environment**) | `gradlew :app:testDebugUnitTest --rerun-tasks` | **38/38 pass** |
+| Go relay | `go vet ./... && go test -count=1 ./...` | **19/19 pass** |
+| Python MCP SDK 1.30.0 end-to-end | `tests/run_pc_e2e.sh` | Through the relay **41/41**, direct **41/41**, resilience **11/11**; insecure listening configurations refuse to start; no token or device key in relay.log / harness.log |
+| Static APK check | `tests/verify_apk.py` | Debug package **45/45 pass**; the release package fails only "check that the subject is not obfuscated", as expected (same as 1.2.1) |
+| Release APK signature | `apksigner verify -v --min-sdk-version 26` | Pass (v2 + v3). Android 9+ sees the new certificate `d5a5eeec…15ea` as signer, Android 8.x the old certificate `52f602d3…b499`; the embedded lineage is old → new. `aapt2` shows versionCode 5 / versionName 1.2.2-eve |
+| Gradle signing guard | Both `rotation.properties` and `keystore.properties` in `signing/` | The build fails right away with the reason, preventing signing with only the old key |
+| Recovery after losing the lineage file | `apksigner sign --lineage <a released 1.2.2 APK>` | The signed APK carries the full 2-level lineage |
+| **Building in a clean environment** (handoff package) | `tests/verify_handoff_build.sh <handoff package> <SDK> D:/Claude/.handoff-fresh` | **All pass**, details below |
+| Handoff package scan (**the ZIP itself**) | `make_handoff.build()` → `check_release_artifacts.py --handoff` | 0 problems, details below |
+| Release directory scan | `check_release_artifacts.py dist/v1.2.2-eve` | 0 problems |
+| Re-check of historical artifacts | `check_release_artifacts.py dist`; `sha256sum -c` in each directory | 0 problems; checksums of the 1.1.0 (dist root), 1.2.0 and 1.2.1 artifacts all match, **nothing overwritten** |
+| Scanner self-test | Plant into a temporary zip a real key (renamed and put into a jar inside the zip), the real password (put into a tar.gz inside the zip), an `sk-ant-` style key, `.git/`, `build/` | All detected; a clean zip passes |
+| Overwrite protection | Run `package_release.py` again on the existing `dist/v1.2.2-eve`; call `make_handoff.build()` again on an existing handoff package | Both refuse, original files unchanged |
 
-**全新环境构建**的具体内容：
+Details of **building in a clean environment**:
 
-- 交接包解压到空目录，`GRADLE_USER_HOME`、`GOMODCACHE`、`GOCACHE` 都是新建的空目录，所有依赖重新下载。下载经本机代理，通过 `JAVA_TOOL_OPTIONS` 提供，不属于源码。
-- 结果：
-  - `HANDOFF_MANIFEST.txt` 中 104 个文件的校验全部通过；
-  - 包内没有 `signing/`、`.git/`、`local.properties`、缓存和构建目录；
-  - 核心测试 64 项、Android 单元测试 38 项，失败 0；
-  - debug 和 release 构建成功，没有签名配置时 release 包为未签名，符合预期；
-  - 中继 `go vet` / `go test` 通过，Linux amd64 构建成功；
-  - 按 `config-templates/keystore.properties.example` 填入一次性测试密钥后，release 包签名成功。
-- 这项验证在 Windows（Git Bash）上执行；Linux / macOS 上**没有**实际运行过。
+- The handoff package is unpacked into an empty directory, with `GRADLE_USER_HOME`, `GOMODCACHE` and `GOCACHE` all new empty directories, so all dependencies are downloaded again. Downloads go through the local proxy, supplied via `JAVA_TOOL_OPTIONS`, which is not part of the source.
+- Results:
+  - all 104 files in `HANDOFF_MANIFEST.txt` pass verification;
+  - the package has no `signing/`, `.git/`, `local.properties`, caches or build directories;
+  - 64 core tests and 38 Android unit tests, 0 failures;
+  - debug and release builds succeed; without a signing configuration the release package is unsigned, as expected;
+  - relay `go vet` / `go test` pass, and the Linux amd64 build succeeds;
+  - after filling in a throwaway test key per `config-templates/keystore.properties.example`, the release package signs successfully.
+- This verification ran on Windows (Git Bash); it has **not** actually been run on Linux / macOS.
 
-**用户此前提供的完整工作目录 ZIP**（`mcp-server.zip`）用交接模式复查的结果：
+Re-check in handoff mode of **the full working directory ZIP the user provided earlier** (`mcp-server.zip`):
 
-- 4437 个文件（含嵌套），共 3631 个问题；
-- 其中密钥相关的有：`signing/eve-release.jks`（与本机逐字节相同，PKCS#12）、`signing/keystore.properties`（含本机真实口令）、`local.properties`；
-- 其余是 `.git/`、`.gradle/`、`.kotlin/`、`build/`、`dist/` 下的文件；
-- 没有发现其他令牌或 API 密钥。
+- 4437 files (including nested ones), 3631 problems in total;
+- key-related among them: `signing/eve-release.jks` (byte for byte identical to the local one, PKCS#12), `signing/keystore.properties` (with the real local password), `local.properties`;
+- the rest are files under `.git/`, `.gradle/`, `.kotlin/`, `build/` and `dist/`;
+- no other tokens or API keys were found.
 
-**未验证**（没有连接手机，也无法运行模拟器）：
+**Not verified** (no phone connected, and no emulator can run):
 
-- 在真机上从 1.2.1 覆盖安装 1.2.2；
-- 安装 1.2.2 后拒绝 1.2.1；
-- Android 8.x 的行为。
+- installing 1.2.2 over 1.2.1 on a real phone;
+- refusing 1.2.1 once 1.2.2 is installed;
+- Android 8.x behaviour.
 
-见 DEVICE_CHECKLIST.md A8–A10。其余真机项与 1.2.1 相同，仍未验证。
+See DEVICE_CHECKLIST.md A8–A10. The other real-device items are the same as for 1.2.1 and still not verified.
 
 ---
 
-## 1.2.1-eve（中继 1.1.0，本轮未改动）— 2026-10-10
+## 1.2.1-eve (relay 1.1.0, unchanged this round) — 2026-10-10
 
-本轮修改：凭据存储改为失败即拒绝（fail closed），兼容模式需要用户明确同意；新增发布包泄密检查和打包脚本。
-下表中的结果都是本轮在最终代码上**重新执行**得到的；没有重新执行的项目单独列出。
+This round's changes: credential storage now fails closed, and compatibility mode needs the user's explicit consent; a leak check for release packages and a packaging script were added.
+Every result in the table below was **re-run** on the final code this round; items not re-run are listed separately.
 
-| 测试 | 命令 | 结果 |
+| Test | Command | Result |
 |---|---|---|
-| `mcp-core` 单元测试 | `gradlew clean :mcp-core:test --rerun-tasks` | **64/64 通过** |
-| Android 单元测试（Robolectric，**模拟环境**） | `gradlew :app:testDebugUnitTest --rerun-tasks` | **38/38 通过**（其中 SecretStoreTest 16 项，包括本轮新增和改写的） |
-| 变异检查 | 把“解密失败时改用明文副本”的 1.2.0 写法放回去 | 有 2 个用例失败，说明能检出；之后已恢复 |
-| Go 中继 | `go vet ./... && go test -count=1 ./...` | **19/19 通过** |
-| Python MCP SDK **1.30.0** 端到端 | `tests/run_pc_e2e.sh` | 全部通过，详见下方 |
-| APK 静态检查 | `tests/verify_apk.py`（debug 包） | **45/45 通过**；release 包只有“检查对象是否已混淆”这一项按预期失败 |
-| 发布包泄密检查 | `tests/check_release_artifacts.py dist` | 16 个产物、579 个文件，**0 个问题**；植入真实密钥的自检能检出 |
-| 打包脚本 | `tools/package_release.py --version 1.2.1-eve` | 成功生成产物，`sha256sum -c` 全部 OK；再次运行时拒绝覆盖；泄密检查不通过时会自动删除产物（误报修复前实际触发过） |
-| 签名密钥轮换演练（一次性测试密钥） | `apksigner rotate` → `sign --lineage --rotation-min-sdk-version 28` → `verify` | 用 v3 方案校验通过，签名者为新证书 |
+| `mcp-core` unit tests | `gradlew clean :mcp-core:test --rerun-tasks` | **64/64 pass** |
+| Android unit tests (Robolectric, **simulated environment**) | `gradlew :app:testDebugUnitTest --rerun-tasks` | **38/38 pass** (including 16 SecretStoreTest cases, some new and some rewritten this round) |
+| Mutation check | Put back 1.2.0's "use the plain-text copy when decryption fails" | 2 cases fail, so it is detected; restored afterwards |
+| Go relay | `go vet ./... && go test -count=1 ./...` | **19/19 pass** |
+| Python MCP SDK **1.30.0** end-to-end | `tests/run_pc_e2e.sh` | All pass, details below |
+| Static APK check | `tests/verify_apk.py` (debug package) | **45/45 pass**; the release package fails only "check that the subject is obfuscated", as expected |
+| Release package leak check | `tests/check_release_artifacts.py dist` | 16 artifacts, 579 files, **0 problems**; the self-test with a planted real key detects it |
+| Packaging script | `tools/package_release.py --version 1.2.1-eve` | Generates the artifacts, `sha256sum -c` all OK; refuses to overwrite when run again; deletes the artifacts automatically when the leak check fails (actually triggered before a false positive was fixed) |
+| Signing key rotation rehearsal (throwaway test key) | `apksigner rotate` → `sign --lineage --rotation-min-sdk-version 28` → `verify` | Verifies with the v3 scheme, signer is the new certificate |
 
-端到端测试的具体结果：
+End-to-end test details:
 
-| 步骤 | 结果 |
+| Step | Result |
 |---|---|
-| 中继配置为在 `0.0.0.0` 明文监听 | 拒绝启动 |
-| 经中继访问 | 41/41 |
-| 直连本地端点 | 41/41 |
-| 稳定性测试 | 11/11（20 个并发调用全部成功；p95 3.8 ms；超时 5.0 s 后返回 -32011；中继重启后 1.0 s 重连；中继不可达时 2.8 s 失败） |
-| 日志检查 | 无令牌和设备密钥 |
-| 新手机 ⇄ 旧中继 1.0.0 | 38/38 |
-| 旧手机 1.1.0 ⇄ 新中继 | 36/36 |
+| Relay configured to listen in plain text on `0.0.0.0` | Refuses to start |
+| Through the relay | 41/41 |
+| Direct to the local endpoint | 41/41 |
+| Resilience tests | 11/11 (all 20 concurrent calls succeed; p95 3.8 ms; -32011 after a 5.0 s timeout; reconnects 1.0 s after a relay restart; fails in 2.8 s when the relay is unreachable) |
+| Log check | No token or device key |
+| New phone ⇄ old relay 1.0.0 | 38/38 |
+| Old phone 1.1.0 ⇄ new relay | 36/36 |
 
-**本轮没有执行的测试（不能视为通过）：**
+**Tests not run this round (cannot be counted as passing):**
 
-- 全部真机项目，见 [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md)。其中新增的 G 节（凭据与 Keystore）和 H 节（OriginOS 等厂商系统）也都还没有执行；
-- 真机上的 Android Keystore 加解密，以及 1.1.0 / 1.2.0 升级到 1.2.1 的迁移。Robolectric 没有 AndroidKeyStore，本轮测试用的是假加密器；
-- Python MCP SDK 1.8.0 的端到端测试，本轮没有重跑（上一轮的结果见下文 §1.3.1）；
-- 混淆后的 release APK 在真机上的运行。
+- all real-device items, see [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md). The new sections G (credentials and Keystore) and H (vendor systems such as OriginOS) have not been run either;
+- Android Keystore encryption and decryption on a real phone, and the migration when upgrading 1.1.0 / 1.2.0 to 1.2.1. Robolectric has no AndroidKeyStore, so this round's tests used a fake encryptor;
+- the end-to-end tests with Python MCP SDK 1.8.0 were not re-run this round (the previous round's results are in §1.3.1 below);
+- running the obfuscated release APK on a real phone.
 
 ---
 
-# 1.2.0-eve 测试记录（上一轮，保留作历史）
+# 1.2.0-eve test record (previous round, kept as history)
 
-日期：2026-10-10。以下数字均来自 1.2.0 代码的实际运行结果。
+Date: 2026-10-10. All numbers below come from actual runs of the 1.2.0 code.
 
-**结果分为三类：**
+**Results fall into three categories:**
 
-| 类别 | 含义 | 结论 |
+| Category | Meaning | Conclusion |
 |---|---|---|
-| 自动化（电脑） | JVM 单元测试、Go 测试、Python MCP SDK 端到端、APK 静态检查。手机部分用 JVM harness 运行**与 App 相同的** `mcp-core` 代码，工具数据为模拟值 | 全部通过 |
-| 模拟环境（Robolectric） | 在 JVM 上模拟 Android 框架，运行 App 的真实工具、服务和设置代码；系统事件、屏幕状态、AppOps 由测试注入 | 全部通过；**不代表真机** |
-| 真机 | Android 手机上的后台存活、Doze、网络切换、开机自启、Keystore、厂商系统限制 | **未验证**（开发环境没有设备，也无法运行加速模拟器）。清单见 [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) |
+| Automated (PC) | JVM unit tests, Go tests, Python MCP SDK end-to-end, static APK checks. The phone side uses a JVM harness running **the same** `mcp-core` code as the app, with simulated tool data | All pass |
+| Simulated environment (Robolectric) | Simulates the Android framework on the JVM and runs the app's real tool, service and settings code; system events, screen state and AppOps are injected by the tests | All pass; **does not represent a real phone** |
+| Real phone | Background survival, Doze, network switching, start on boot, Keystore and vendor system restrictions on an Android phone | **Not verified** (the development environment has no device and cannot run an accelerated emulator). Checklist in [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) |
 
-## 1. 自动化（电脑）
+## 1. Automated (PC)
 
-### 1.1 `mcp-core` 单元测试：64 项全部通过（连续运行 3 次稳定）
+### 1.1 `mcp-core` unit tests: all 64 pass (stable over 3 consecutive runs)
 
 ```
 gradlew :mcp-core:test
 ```
 
-| 测试类 | 项数 | 覆盖 |
+| Test class | Cases | Covers |
 |---|---|---|
-| `ToolRegistryTest` | 5 | 36 个已移除工具名注册即失败；白名单与移除名单不重叠；关闭的工具不可见、不可解析；只读注解 |
-| `McpProtocolTest` | 10 | 协议版本协商；通知；id 类型；已移除工具 / 变体 / 关闭工具统一返回 -32602；参数和工具错误作为 isError 结果；批量请求 |
-| `HardeningTest` | 8 | 本地端点拒绝绑定 `0.0.0.0`、局域网 IP、`::`、域名；20 万层嵌套 JSON 被安全拒绝；批量超过 32 条、jsonrpc≠2.0 被拒绝；11 种畸形请求体都不会执行工具；Server-Timing；请求统计中不含凭据；隐私默认值（敏感工具默认关闭、不可列出、不可调用）；多证书指纹解析与参数校验 |
-| `HttpServerTest` | 15 | 通过真实 socket 测试：鉴权、Origin、路由、405/202、按字节读取中文请求体、chunked、413（含**真实发送 1 MiB 以上请求体**仍能收到 413 的回归测试）、提前 401 不被 RST、Content-Type、协议版本头 |
-| `RelayClientTest` | 13 | 证书固定；转发与二次鉴权；Server-Timing 回传；40 个并发请求的 id 一一对应；应用层 ping/pong；看门狗在中继沉默时重连；指纹错误进入长退避并报告服务器指纹；第二个指纹用于换证书；未固定的自签证书被拒；设备密钥被拒；被顶替（4000）后长退避；中继断开后重连；10 次连续立即重连被去抖为 1 次；无网络时不发起连接、网络恢复后立即连接 |
-| `UsageAggregatorTest` | 9 | 会话配对、应用内切换合并、区间裁剪、灭屏与关机、前台判定（熄屏 / 锁屏优先于事件推断） |
-| `SecretsTest` | 6 | 令牌长度与随机性、Bearer 解析、脱敏、指纹解析、配置校验 |
+| `ToolRegistryTest` | 5 | Registering any of 36 removed tool names fails; the allowlist and removed list do not overlap; tools that are off are invisible and unresolvable; read-only annotations |
+| `McpProtocolTest` | 10 | Protocol version negotiation; notifications; id types; removed tools / variants / tools that are off all return -32602; argument and tool errors as isError results; batch requests |
+| `HardeningTest` | 8 | The local endpoint refuses to bind `0.0.0.0`, LAN IPs, `::` and domain names; 200,000 levels of nested JSON are refused safely; batches over 32 items and jsonrpc≠2.0 are refused; 11 kinds of malformed request bodies never run a tool; Server-Timing; request statistics contain no credentials; privacy defaults (sensitive tools off by default, not listable, not callable); parsing and validation of multiple certificate fingerprints |
+| `HttpServerTest` | 15 | Over a real socket: authentication, Origin, routing, 405/202, reading CJK request bodies by bytes, chunked, 413 (including a regression test that **really sends a body over 1 MiB** and still gets 413), an early 401 not being RST, Content-Type, protocol version header |
+| `RelayClientTest` | 13 | Certificate pinning; forwarding and second authentication; Server-Timing passed back; ids of 40 concurrent requests match one to one; application-level ping/pong; the watchdog reconnects when the relay goes silent; a wrong fingerprint goes into long backoff and reports the server's fingerprint; a second fingerprint for changing certificates; an unpinned self-signed certificate is refused; device key refused; long backoff after being replaced (4000); reconnects after the relay disconnects; 10 consecutive immediate reconnects debounced into 1; no connection attempt without a network, immediate connection when the network returns |
+| `UsageAggregatorTest` | 9 | Session pairing, merging switches within an app, range clipping, screen off and shutdown, foreground decision (screen off / locked take precedence over inference from events) |
+| `SecretsTest` | 6 | Token length and randomness, Bearer parsing, redaction, fingerprint parsing, configuration validation |
 
-### 1.2 Go 中继测试：19 项全部通过
+### 1.2 Go relay tests: all 19 pass
 
 ```
 cd relay && go vet ./... && go test ./...
 ```
 
-覆盖：
+Covers:
 
-- **认证**：设备密钥错误被拒绝；未认证请求、错误令牌、Origin 都在中继拦截，**不会到达手机**。
-- **转发**：只转发白名单内的请求头和响应头；`/health` 只返回最少的信息；浏览器无法打开设备 WebSocket。
-- **监听安全**：0.0.0.0、`:8787`、局域网 IP、`[::]`、域名在不开 TLS 时都拒绝启动；按实际绑定地址的二次检查同样有效；计时参数超出范围时拒绝启动。
-- **离线与超时**：离线等待会接住正在重连的设备，并且等待时间有上限；设备离线、超时、处理途中断开都返回带原 id 的 JSON-RPC 错误（通知返回 202、批量逐条返回、无法解析时退回 HTTP 状态码、令牌错误仍为 401）。
-- **心跳与探测**：心跳会通告间隔，不回 pong 的设备在读超时后被断开；请求超时后会探测连接，5 秒内无回应就断开。
-- **并发与计时**：50 个并发请求的结果不串；Server-Timing 带各阶段耗时，并阻止非数字值注入响应头。
-- **日志**：每个测试都在 **debug 日志级别**下断言中继日志里没有令牌和设备密钥。
+- **Authentication**: a wrong device key is refused; unauthenticated requests, wrong tokens and Origin are all blocked at the relay and **never reach the phone**.
+- **Forwarding**: only allowlisted request and response headers are forwarded; `/health` returns minimal information; browsers cannot open the device WebSocket.
+- **Listening security**: 0.0.0.0, `:8787`, LAN IPs, `[::]` and domain names all refuse to start without TLS; the second check against the actually bound address works too; timing parameters out of range refuse to start.
+- **Offline and timeouts**: the offline wait catches a device that is reconnecting, and the wait is capped; device offline, timeout and mid-request disconnects all return JSON-RPC errors with the original id (notifications get 202, batches answer item by item, unparsable requests fall back to an HTTP status code, wrong tokens still get 401).
+- **Heartbeat and probing**: the heartbeat announces its interval, and a device that does not answer pong is disconnected after the read timeout; after a request timeout the connection is probed and dropped if there is no answer within 5 seconds.
+- **Concurrency and timing**: the results of 50 concurrent requests never mix; Server-Timing carries per-stage timings and blocks non-numeric values from being injected into the response header.
+- **Logs**: every test asserts at the **debug log level** that the relay log contains no token and no device key.
 
-### 1.3 Python MCP SDK 端到端（`tests/run_pc_e2e.sh`）：全部通过
+### 1.3 Python MCP SDK end-to-end (`tests/run_pc_e2e.sh`): all pass
 
-链路：Go 中继（自签 TLS）⇄ JVM harness ⇄ Python MCP SDK 1.30.0。
+Chain: Go relay (self-signed TLS) ⇄ JVM harness ⇄ Python MCP SDK 1.30.0.
 
-| 场景 | 结果 |
+| Scenario | Result |
 |---|---|
-| 中继在 `0.0.0.0` 上明文监听 | 拒绝启动（`refusing to start`） |
-| 经中继：协议、鉴权、白名单、畸形请求（`test_mcp_interop.py`） | 41/41 |
-| 直连手机本地端点 | 41/41 |
-| 稳定性（`test_resilience.py`） | 11/11 |
-| 日志泄露检查（中继、harness） | 均无令牌和设备密钥 |
-| 混合版本 A：当前手机代码 ⇄ 旧中继 1.0.0 | 38/38（1.2 新增检查跳过） |
-| 混合版本 B：旧手机代码 1.1.0 ⇄ 当前中继 | 36/36（1.2 新增检查跳过） |
+| Relay listening in plain text on `0.0.0.0` | Refuses to start (`refusing to start`) |
+| Through the relay: protocol, authentication, allowlist, malformed requests (`test_mcp_interop.py`) | 41/41 |
+| Direct to the phone's local endpoint | 41/41 |
+| Resilience (`test_resilience.py`) | 11/11 |
+| Log leak check (relay, harness) | No token or device key in either |
+| Mixed versions A: current phone code ⇄ old relay 1.0.0 | 38/38 (checks new in 1.2 skipped) |
+| Mixed versions B: old phone code 1.1.0 ⇄ current relay | 36/36 (checks new in 1.2 skipped) |
 
-41 项检查覆盖以下内容：
+The 41 checks cover:
 
-- **鉴权**：无令牌、错误令牌、Basic 方案都返回 401，且不泄露工具名；Origin 返回 403；未认证访问 `/tools` `/info` `/sse` `/` `/status` 都不暴露信息。
-- **协议**：`/health` 最小化；GET 返回 405；通知返回 202；initialize 返回 JSON；协议版本协商。
-- **畸形请求**：请求体超过 1 MiB 返回 413；10 万层嵌套 JSON、非法 UTF-8、jsonrpc 1.0、33 条的批量都被拒绝；重复键（`battery` 后跟 `shell`）不能执行 shell；批量调用写入类工具全部被拒绝。
-- **SDK 行为**：没有令牌时 SDK 无法初始化；服务端只声明 tools 能力；tools/list 不超出白名单，且全部带只读注解；逐个调用已列出的工具；关闭的工具（`storage_info`）无法列出也无法直接调用。
-- **写入类工具**：36 个已移除的工具名加 10 个名字变体，共 46 个，全部无法调用。
+- **Authentication**: no token, a wrong token and the Basic scheme all return 401 without leaking tool names; Origin returns 403; unauthenticated access to `/tools`, `/info`, `/sse`, `/` and `/status` exposes nothing.
+- **Protocol**: minimal `/health`; GET returns 405; notifications return 202; initialize returns JSON; protocol version negotiation.
+- **Malformed requests**: bodies over 1 MiB return 413; 100,000 levels of nested JSON, invalid UTF-8, jsonrpc 1.0 and a batch of 33 are all refused; duplicate keys (`battery` followed by `shell`) cannot run shell; batch calls to write tools are all refused.
+- **SDK behaviour**: the SDK cannot initialise without a token; the server declares only the tools capability; tools/list stays within the allowlist, all with read-only annotations; every listed tool is called one by one; a tool that is off (`storage_info`) can be neither listed nor called directly.
+- **Write tools**: 36 removed tool names plus 10 name variants, 46 in total, none of which can be called.
 
-稳定性 11 项的实测值：
+Measured values of the 11 resilience checks:
 
-| 项 | 结果 |
+| Item | Result |
 |---|---|
-| 同一会话 20 个并发 tools/call | 20/20，147 ms |
-| Eve 侧单次调用延迟（本机中继） | p50 3.1 ms，p95 3.8 ms |
-| Server-Timing | relay 0.8 ms，rtt 0.8 ms，phone 0.3 ms，tool 0.0 ms |
-| 工具超过中继超时（5 s） | 5.0 s 后返回 `McpError -32011`，原因明确 |
-| 超时后同一会话继续调用 | 成功 |
-| 中继重启后手机自动重连 | 1.0 s |
-| 中继重启后同一 MCP 会话 | 继续可用（本机网络下） |
-| 中继完全不可达 | 客户端 2.7 s 内失败，不会挂住 |
-| 中继恢复后手机重连 | 1.3 s |
+| 20 concurrent tools/call in one session | 20/20, 147 ms |
+| Single-call latency on Eve's side (local relay) | p50 3.1 ms, p95 3.8 ms |
+| Server-Timing | relay 0.8 ms, rtt 0.8 ms, phone 0.3 ms, tool 0.0 ms |
+| Tool exceeding the relay timeout (5 s) | `McpError -32011` after 5.0 s, with a clear reason |
+| Further calls in the same session after the timeout | Succeed |
+| Phone reconnecting by itself after a relay restart | 1.0 s |
+| The same MCP session after a relay restart | Still usable (on a local network) |
+| Relay completely unreachable | The client fails within 2.7 s, never hangs |
+| Phone reconnecting after the relay recovers | 1.3 s |
 
-### 1.3.1 用 Python MCP SDK 1.8.0 重跑同一套端到端测试（最终代码）
+### 1.3.1 The same end-to-end tests re-run with Python MCP SDK 1.8.0 (final code)
 
-| 场景 | 结果 |
+| Scenario | Result |
 |---|---|
-| 经中继 / 直连 | 41/41、41/41（协商协议 2024-11-05） |
-| 稳定性 | 10/11 |
+| Through the relay / direct | 41/41, 41/41 (negotiated protocol 2024-11-05) |
+| Resilience | 10/11 |
 
-**唯一失败项是“中继完全不可达时客户端快速失败”：SDK 1.8.0 在连接被拒绝时不会把错误交给调用方，`initialize` 一直挂到调用方自己设置的超时（测试里是 30 秒）。**
-这是旧版 SDK 客户端的行为，服务端无法修复；SDK 1.30.0 会在 2.7 秒内失败。
+**The only failure is "the client fails fast when the relay is completely unreachable": on a refused connection SDK 1.8.0 does not hand the error to the caller, and `initialize` hangs until the caller's own timeout (30 seconds in the test).**
+This is the behaviour of the old SDK client and cannot be fixed on the server; SDK 1.30.0 fails within 2.7 seconds.
 
-建议：
+Recommendations:
 
-- Project Eve 使用 SDK ≥ 1.30；
-- 或在调用外层用 `asyncio.wait_for` 设置超时，见 [EVE_INTEGRATION.md](EVE_INTEGRATION.md)。
+- Project Eve should use SDK ≥ 1.30;
+- or set an outer timeout with `asyncio.wait_for` around calls, see [VIOLET_INTEGRATION.md](VIOLET_INTEGRATION.md) (called EVE_INTEGRATION.md at the time).
 
-### 1.4 APK 静态检查（`tests/verify_apk.py`）
+### 1.4 Static APK check (`tests/verify_apk.py`)
 
-对 debug 包运行（未混淆，能按类名定位），45 项全部通过，覆盖：
+Run on the debug package (not obfuscated, so classes can be found by name): all 45 checks pass, covering:
 
-- 权限与清单完全一致（9 项），10 个高权限都已移除。
-- 没有 Shizuku Provider，没有无障碍服务；`allowBackup=false`、`usesCleartextTraffic=false`、前台服务类型为 `specialUse`。
-- APK 中没有 Shizuku、QuickJS、DocumentFile，也没有原项目的 Bridge、Bore、File、Script、Net、FloatWindow 相关类。
-- 全应用范围内没有 `Runtime.exec`、`ProcessBuilder`、文件删除或写入、ContentResolver 写入、强杀应用、写系统设置。
-- **工具包和协议核心中**没有以下任何调用：启动组件或发送广播、发通知、写剪贴板、写系统设置、改音量 / Wi-Fi / 蓝牙、执行进程、打电话或发短信、写文件。
+- permissions exactly match the manifest (9), and 10 high-privilege permissions were removed.
+- No Shizuku provider, no accessibility service; `allowBackup=false`, `usesCleartextTraffic=false`, foreground service type `specialUse`.
+- The APK has no Shizuku, QuickJS or DocumentFile, and none of the original project's Bridge, Bore, File, Script, Net or FloatWindow classes.
+- No `Runtime.exec`, `ProcessBuilder`, file deletion or writing, ContentResolver writes, force-stopping apps or writing system settings anywhere in the app.
+- **In the tool package and protocol core** there is none of the following: starting components or sending broadcasts, posting notifications, writing the clipboard, writing system settings, changing volume / Wi-Fi / Bluetooth, running processes, calling or texting, writing files.
 
-对 release 包（R8 混淆）运行时，只有“工具类存在”这一项失败。这是检查脚本的预期行为：它借这一项确认被检查的包没有混淆。权限、组件和第三方库检查全部通过。
+On the release package (R8 obfuscated) only "the tool classes exist" fails. This is the check script's intended behaviour: it uses this item to confirm that the package being checked is not obfuscated. Permission, component and third-party library checks all pass.
 
-## 2. 模拟环境（Robolectric 4.14.1，Android SDK 34）：30 项全部通过
+## 2. Simulated environment (Robolectric 4.14.1, Android SDK 34): all 30 pass
 
 ```
 gradlew :app:testDebugUnitTest
 ```
 
-| 测试类 | 项数 | 覆盖 |
+| Test class | Cases | Covers |
 |---|---|---|
-| `ToolsPolicyTest` | 6 | App 实际注册的工具恰好等于白名单；新安装只列出 5 个工具，敏感工具直接调用被拒绝；开关立即生效；即使有人往开关里写入已移除的工具名也无效；**开启全部 14 个工具逐个调用后，没有启动 Activity / Service、没有发广播、没有发通知、亮度设置没变、没有写文件**；`system_properties` 不再含序列号 |
-| `UsageToolsTest` | 9 | current 只返回 5 个字段且带应用名；切换应用后结果更新；熄屏、锁屏不给出应用；离开前台返回 unknown，不猜测；详细模式只在手机上开启后才给出 last_app；**撤销使用情况访问权限**后前台应用返回 permission_denied，使用时长返回 PERMISSION_DENIED；使用时长按事件计算并带应用名；屏幕状态为实时值 |
-| `SecretStoreTest` | 8 | 从明文迁移并保持原值；迁移失败时保留明文并报错；无法解密时不悄悄替换；中断的迁移会被补完；没有 Keystore 时明确进入兼容模式；**从 1.1.0 升级后令牌不变**；全部清除会生成新令牌并删除中继凭据；撤销远程凭据会保留令牌 |
-| `ServiceLifecycleTest` | 7 | 启动后本地端点只在 127.0.0.1 上提供服务（未带令牌返回 401）；通知上的“停止”会记录为用户主动停止；用户停止后，系统粘性重启不会把服务拉起；期望运行时粘性重启会恢复；被杀掉时显示为“受限”而不是“运行中”；开机恢复只在“开机自启开启且用户没有手动停止过”时发生，伪造的 QUICKBOOT 广播被忽略；APPLY 不会在服务未运行时启动前台服务；新安装显示为“已停止” |
+| `ToolsPolicyTest` | 6 | The tools the app actually registers equal the allowlist exactly; a fresh install lists only 5 tools, and calling a sensitive tool directly is refused; switches take effect immediately; writing a removed tool name into the switches has no effect; **after turning on all 14 tools and calling each, no Activity / Service was started, no broadcast sent, no notification posted, the brightness setting unchanged, and no file written**; `system_properties` no longer contains the serial number |
+| `UsageToolsTest` | 9 | current returns only 5 fields with the app name; results update after switching apps; screen off and locked give no app; leaving the foreground returns unknown without guessing; detailed mode gives last_app only after it is turned on on the phone; **after usage access is revoked** the foreground app returns permission_denied and usage time returns PERMISSION_DENIED; usage time is computed from events with app names; screen state is real-time |
+| `SecretStoreTest` | 8 | Migrates from plain text keeping the original value; keeps the plain text and reports an error when migration fails; never silently replaces anything when decryption is impossible; an interrupted migration is completed; explicitly enters compatibility mode without Keystore; **the token is unchanged after upgrading from 1.1.0**; clear all generates a new token and deletes the relay credentials; revoking remote credentials keeps the token |
+| `ServiceLifecycleTest` | 7 | After starting, the local endpoint serves only on 127.0.0.1 (401 without a token); "Stop" on the notification is recorded as stopped by the user; after the user stops it, the system's sticky restart does not bring the service back; when it should be running, the sticky restart restores it; when killed it shows as "restricted", not "running"; boot recovery happens only when "start on boot is on and the user never stopped it by hand", and a faked QUICKBOOT broadcast is ignored; APPLY does not start the foreground service when the service is not running; a fresh install shows "stopped" |
 
-**变异检查**：人为加入两个缺陷——把 `installed_apps` 设为默认开启，以及让“停止”不记录用户意图——相应的测试都会失败。说明这些测试确实能发现问题。
+**Mutation check**: two defects were introduced on purpose — making `installed_apps` on by default, and making "Stop" not record the user's intent — and the matching tests failed. So these tests really do catch problems.
 
-## 3. 未执行的测试
+## 3. Tests not run
 
-以下项目需要真机，**未验证，不能视为通过**：
+The following need a real phone and are **not verified; they cannot be counted as passing**:
 
-- 真机上的前台应用和使用时长数据准确性、应用切换、锁屏、撤销权限后的系统行为
-- 后台存活：划掉最近任务、任务管理器停止、厂商省电策略、长时间熄屏、Doze
-- 开机自启（`BOOT_COMPLETED` 实际送达，以及 Android 15 上 `specialUse` 前台服务能否启动）
-- Wi-Fi ↔ 移动网络切换、飞行模式、断网恢复、真实公网下中继重启后的恢复
-- Android Keystore 在真机上的加解密，以及 1.1.0 升级时的令牌迁移
-- R8 混淆后的 release 包在真机上的运行（本轮的 Robolectric 和 harness 测试都基于未混淆的代码）
-- 两台手机使用同一组凭据时的行为（逻辑已在 `RelayClientTest` 和 Go 测试中验证）
-- 在 Project Eve 中的实际接入，以及真实网络下的耗时分布
+- accuracy of foreground app and usage time data on a real phone, app switching, locking, system behaviour after revoking permission
+- background survival: swiping from recent tasks, stopping from the task manager, vendor power-saving policies, long screen-off periods, Doze
+- start on boot (`BOOT_COMPLETED` really delivered, and whether a `specialUse` foreground service can start on Android 15)
+- Wi-Fi ↔ mobile network switching, airplane mode, recovery after losing the network, recovery after a relay restart on the real internet
+- Android Keystore encryption and decryption on a real phone, and the token migration when upgrading from 1.1.0
+- running the R8-obfuscated release package on a real phone (this round's Robolectric and harness tests are all based on unobfuscated code)
+- behaviour when two phones use the same credentials (the logic is verified in `RelayClientTest` and the Go tests)
+- the actual integration in Project Eve, and the latency distribution on a real network
 
-## 4. 已知限制
+## 4. Known limitations
 
-- 前台应用由 UsageStatsManager 事件推断，系统事件可能延迟数秒；通知栏、系统对话框等界面不产生 Activity 事件，此时返回 `unknown`。
-- 使用时长统计不计灭屏期间；`method=events` 最多支持 10 天，更长的区间请用 `method=system`。
-- 厂商系统（MIUI、ColorOS、HarmonyOS、OneUI 等）可能额外限制后台运行。界面会显示“受限 / 已停止”，但无法保证永久在线。
-- 中继完全不可达时，Python SDK 会结束当前会话；Eve 需要在下次调用时重新建立会话。设备离线或超时不会结束会话。
-- 旧版 Python SDK（例如 1.8.0）在中继不可达时会挂起，直到调用方超时（见 §1.3.1）。
+- The foreground app is inferred from UsageStatsManager events, and system events may be delayed by a few seconds; screens such as the notification shade and system dialogs produce no Activity events, in which case `unknown` is returned.
+- Usage time does not count screen-off periods; `method=events` supports at most 10 days, so use `method=system` for longer ranges.
+- Vendor systems (MIUI, ColorOS, HarmonyOS, OneUI and others) may restrict background running further. The UI shows "restricted / stopped", but staying online forever cannot be guaranteed.
+- When the relay is completely unreachable, the Python SDK ends the current session; Eve has to re-establish the session on the next call. Device offline or timeouts do not end the session.
+- Old Python SDKs (e.g. 1.8.0) hang when the relay is unreachable until the caller's timeout (see §1.3.1).

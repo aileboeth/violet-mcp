@@ -1,19 +1,21 @@
-# Violet 接入示例
+# Connecting Violet: example
 
-Violet 的后台“工具”页可以直接添加 MCP 服务器（填地址和 `Authorization` 请求头，再给工具分类、授权给 Agent）；也可以在配置文件的 `MCP_SERVERS`（JSON 数组）里写。服务器名用 `android-phone`，Violet 自带这 14 个只读工具的分类模板。
-本服务器对 Violet 来说就是一个普通的 Streamable HTTP MCP 端点，**不需要修改 Violet 代码**。
+**English** | [简体中文](VIOLET_INTEGRATION.zh-CN.md)
 
-## 1. 配置
+Violet's Tools page in the panel can add an MCP server directly (enter the address and the `Authorization` request header, then classify the tools and grant them to agents); it can also be written in `MCP_SERVERS` (a JSON array) in the configuration file. Use `android-phone` as the server name; Violet ships a classification template for these 14 read-only tools.
+To Violet this server is just an ordinary Streamable HTTP MCP endpoint, and **Violet's code needs no changes**.
 
-推荐中继和 Violet 在同一台机器上（中继只监听 `127.0.0.1:8787`）：
+## 1. Configuration
 
-| 项 | 值 |
+Having the relay and Violet on the same machine is recommended (the relay listens only on `127.0.0.1:8787`):
+
+| Item | Value |
 |---|---|
 | URL | `http://127.0.0.1:8787/mcp` |
-| 传输 | Streamable HTTP |
-| 请求头 | `Authorization: Bearer <手机 App “安全”页复制的访问令牌>` |
+| Transport | Streamable HTTP |
+| Request header | `Authorization: Bearer <access token copied from the phone app's Security page>` |
 
-示意（**字段名以 Violet 现有 schema 为准**，这里只说明需要哪三项）：
+Sketch (**the field names follow Violet's existing schema**; this only shows which three items are needed):
 
 ```json
 [
@@ -21,14 +23,14 @@ Violet 的后台“工具”页可以直接添加 MCP 服务器（填地址和 `
     "name": "android-phone",
     "transport": "streamable_http",
     "url": "http://127.0.0.1:8787/mcp",
-    "headers": { "Authorization": "Bearer 手机上复制的访问令牌" }
+    "headers": { "Authorization": "Bearer access-token-copied-from-the-phone" }
   }
 ]
 ```
 
-从 1.1.0 升级到 1.2.0 时，令牌和 URL 都不变，Violet 的配置不需要改。
+When upgrading from 1.1.0 to 1.2.0, neither the token nor the URL changes, so Violet's configuration needs no changes.
 
-## 2. 等价的 Python 代码（Python MCP SDK 1.x）
+## 2. Equivalent Python code (Python MCP SDK 1.x)
 
 ```python
 import asyncio
@@ -37,7 +39,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.exceptions import McpError
 
 URL = "http://127.0.0.1:8787/mcp"
-HEADERS = {"Authorization": "Bearer 手机上复制的访问令牌"}
+HEADERS = {"Authorization": "Bearer access-token-copied-from-the-phone"}
 
 async def main():
     async with streamablehttp_client(URL, headers=HEADERS) as (read, write, _):
@@ -48,70 +50,72 @@ async def main():
                 r = await s.call_tool("get_foreground_app", {})
                 print(r.structuredContent)  # {"state": "current", "app": "...", "package": "...", ...}
             except McpError as e:
-                # 手机暂时离线 / 超时：只有这一次调用失败，会话仍然可以继续用
-                print("设备暂不可用：", e.error.code, e.error.message)
+                # Phone briefly offline / timeout: only this call failed, the session can still be used
+                print("Device unavailable for now:", e.error.code, e.error.message)
 
 asyncio.run(main())
 ```
 
-已测试的 SDK 版本：1.8.0（协商协议 2024-11-05）和 1.30.0（2025-11-25）。
+Tested SDK versions: 1.8.0 (negotiated protocol 2024-11-05) and 1.30.0 (2025-11-25).
 
-**注意**：中继进程完全不可达（例如 VPS 上的中继停止了）时：
+**Note**: when the relay process is completely unreachable (e.g. the relay on the VPS stopped):
 
-- SDK 1.30.0 会在约 3 秒内抛出连接错误；
-- SDK 1.8.0 不会抛出，而是一直等到调用方自己的超时。
+- SDK 1.30.0 raises a connection error within about 3 seconds;
+- SDK 1.8.0 does not raise, and waits until the caller's own timeout.
 
-使用旧版 SDK 时，建议在外层加上超时：`await asyncio.wait_for(s.initialize(), 15)`、`await asyncio.wait_for(s.call_tool(...), 30)`。
+With the old SDK, add an outer timeout: `await asyncio.wait_for(s.initialize(), 15)`, `await asyncio.wait_for(s.call_tool(...), 30)`.
 
-## 3. 返回值与错误
+## 3. Return values and errors
 
-| 情况 | Violet 看到的结果 | 会话是否还能用 |
+| Situation | What Violet gets | Session still usable |
 |---|---|---|
-| 正常 | 工具结果（`content` 文本 + `structuredContent`） | 能 |
-| 工具内部错误、参数错误、使用情况权限未授予 | 工具结果，`isError: true`，`errorCode` 给出原因（例如 `PERMISSION_DENIED`） | 能 |
-| 工具被用户在手机上关闭，或调用了不存在的工具 | `McpError -32602 Unknown tool` | 能 |
-| 手机离线（等待 `-offline-wait` 后仍未连上） | `McpError -32010 Device offline` | 能 |
-| 手机在 `-request-timeout`（默认 20 秒）内没有响应 | `McpError -32011 Device did not respond within 20s`；中继同时探测连接，失效就断开，让手机重连 | 能 |
-| 处理途中手机断开 | `McpError -32012` | 能 |
-| 令牌错误 | HTTP 401，SDK 抛出异常并结束会话 | 否（属于配置错误） |
-| 中继进程没有运行 | 连接被拒绝，SDK 抛出异常 | 否；Violet 应在下次调用时重新建立会话 |
+| Normal | Tool result (`content` text + `structuredContent`) | Yes |
+| Internal tool error, bad arguments, usage access not granted | Tool result with `isError: true`, `errorCode` gives the reason (e.g. `PERMISSION_DENIED`) | Yes |
+| The tool was turned off by the user on the phone, or a non-existent tool was called | `McpError -32602 Unknown tool` | Yes |
+| Phone offline (still not connected after `-offline-wait`) | `McpError -32010 Device offline` | Yes |
+| The phone did not answer within `-request-timeout` (default 20 seconds) | `McpError -32011 Device did not respond within 20s`; the relay also probes the connection and drops it if dead, so the phone reconnects | Yes |
+| The phone disconnected mid-request | `McpError -32012` | Yes |
+| Wrong token | HTTP 401; the SDK raises an exception and ends the session | No (a configuration error) |
+| The relay process is not running | Connection refused; the SDK raises an exception | No; Violet should re-establish the session on the next call |
 
-`-32010`、`-32011`、`-32012` 的 `error.data.retryable` 为 `true`。
+`error.data.retryable` is `true` for `-32010`, `-32011` and `-32012`.
 
-## 4. 前台应用的读法
+## 4. Reading the foreground app
 
-`get_foreground_app` 默认只返回：
+By default `get_foreground_app` returns only:
 
 ```json
-{"state": "current", "app": "微信", "package": "com.tencent.mm", "observed_at": "2026-10-10T10:02:11.000+08:00", "age_seconds": 75}
+{"state": "current", "app": "WeChat", "package": "com.tencent.mm", "observed_at": "2026-10-10T10:02:11.000+08:00", "age_seconds": 75}
 ```
 
-| state | 含义 | app / package |
+(`app` is the app's label as shown on the phone, so it is in the phone's language.)
+
+| state | Meaning | app / package |
 |---|---|---|
-| `current` | 亮屏、已解锁，且该应用进入前台后没有离开事件 | 给出 |
-| `screen_off` | 屏幕熄灭 | null |
-| `locked` | 停在锁屏界面 | null |
-| `unknown` | 无法确定（例如应用已离开前台、停在通知栏，或没有近期事件） | null |
-| `permission_denied` | 手机未授予使用情况访问权限 | null |
+| `current` | Screen on, unlocked, and no leave event since the app came to the foreground | Given |
+| `screen_off` | Screen off | null |
+| `locked` | Sitting on the lock screen | null |
+| `unknown` | Cannot be determined (e.g. the app left the foreground, the notification shade is open, or no recent events) | null |
+| `permission_denied` | The phone has not granted usage access | null |
 
-`observed_at` 是支持该结论的最近一次系统事件时间。`current` 状态下它就是应用进入前台的时间，`age_seconds` 大只说明用户在这个应用里停留得久。
-如果用户在手机上开启了“前台应用：详细模式”，非 current 状态下还会额外返回 `last_app`、`last_package` 和 `reason`。
+`observed_at` is the time of the latest system event supporting the conclusion. In the `current` state it is when the app came to the foreground, and a large `age_seconds` only means the user has stayed in that app for a long time.
+If the user turned on "Foreground app: detailed mode" on the phone, non-current states also return `last_app`, `last_package` and `reason`.
 
-## 5. 定位延迟
+## 5. Finding latency
 
-中继给每个响应加上 `Server-Timing` 头，并在日志中记录同样的内容（毫秒，单调时钟）：
+The relay adds a `Server-Timing` header to every response and logs the same values (milliseconds, monotonic clock):
 
 ```
 Server-Timing: relay;dur=12.4, wait_device;dur=0.0, rtt;dur=11.9, phone;dur=3.1, tool;dur=2.0
 ```
 
-| 字段 | 含义 |
+| Field | Meaning |
 |---|---|
-| `relay` | 请求进入中继到响应就绪的总耗时 |
-| `wait_device` | 等待手机上线的时间（手机在线时为 0） |
-| `rtt` | 中继发给手机到收到手机响应（含网络往返） |
-| `phone` | 手机收到请求到发出响应 |
-| `tool` | 工具执行本身 |
+| `relay` | Total time from the request entering the relay to the response being ready |
+| `wait_device` | Time spent waiting for the phone to come online (0 when the phone is online) |
+| `rtt` | From the relay sending to the phone to receiving the phone's response (including the network round trip) |
+| `phone` | From the phone receiving the request to sending its response |
+| `tool` | The tool execution itself |
 
-在中继上查看：`journalctl -u violet-mcp-relay | grep "client POST"`，每行有 `total=`、`rtt=`、`phone=`、`tool=`。
-如果 Violet 一次任务耗时很长（例如之前观察到的约 198 秒），而这里的 `total` 只有几十毫秒，那么瓶颈不在手机 MCP 这一环。
+On the relay: `journalctl -u violet-mcp-relay | grep "client POST"`; each line has `total=`, `rtt=`, `phone=`, `tool=`.
+If one Violet task takes a long time (e.g. the roughly 198 seconds observed earlier) while `total` here is only tens of milliseconds, the bottleneck is not in the phone MCP link.

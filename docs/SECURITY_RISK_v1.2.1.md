@@ -1,80 +1,82 @@
-# 安全风险报告（1.2.1-eve）
+# Security risk report (1.2.1-eve)
 
-日期：2026-10-10。本轮只处理剩余问题，不新增功能。
+**English** | [简体中文](SECURITY_RISK_v1.2.1.zh-CN.md)
 
-## 1. 签名密钥是否随发布包泄露
+Date: 2026-10-10. This round only dealt with the remaining problems and added no features.
 
-**结论：没有发现泄露。**
+## 1. Did the signing key leak with the release packages?
 
-本轮编写了 `tests/check_release_artifacts.py`，对全部历史产物做了内容级检查：
+**Conclusion: no leak was found.**
 
-- 范围：1.1.0、1.2.0 的 APK、源码包、中继程序，以及本轮的 1.2.1，共 16 个产物、579 个文件（含 jar 等嵌套包）。
-- 检查内容：
-  1. 禁止出现的文件名；
-  2. PEM 私钥块；
-  3. JKS / PKCS#12 密钥库结构；
-  4. 与本机 `signing/` 中真实文件的 SHA-256 比对；
-  5. 本机真实密钥库口令的字面匹配；
-  6. 带字面值的 `storePassword=` / `keyPassword=`。
-- 结果：0 个问题。
-- 脚本自检：把真实 `.jks`（包括改名后的副本）和 `keystore.properties` 放进测试包，都能被检出。
+This round wrote `tests/check_release_artifacts.py` and did a content-level check of all historical artifacts:
 
-git 索引中也没有任何密钥文件。
+- Scope: the APKs, source packages and relay programs of 1.1.0 and 1.2.0, plus this round's 1.2.1: 16 artifacts, 579 files (including nested packages such as jars).
+- What was checked:
+  1. forbidden file names;
+  2. PEM private key blocks;
+  3. JKS / PKCS#12 keystore structures;
+  4. SHA-256 comparison with the real files in the local `signing/`;
+  5. literal matching of the real local keystore password;
+  6. `storePassword=` / `keyPassword=` with a literal value.
+- Result: 0 problems.
+- Self-test of the script: putting the real `.jks` (including a renamed copy) and `keystore.properties` into a test package, both were detected.
 
-| 加固措施 | 说明 |
+The git index contains no key files either.
+
+| Hardening | Notes |
 |---|---|
-| `.gitignore` | 在全仓库范围排除 `*.jks`、`*.keystore`、`*.p12`、`*.pfx`、`keystore.properties`、`device.secret`、`selfsigned.key`、`.env` |
-| `tools/package_release.py` | 唯一的打包入口：<br>• 源码只取 git 跟踪的文件，再按黑名单过滤<br>• 打包完成后自动做泄密检查，检查不通过就删除全部产物<br>• 拒绝覆盖已存在的版本目录 |
-| 处理说明 | [SIGNING_KEY_INCIDENT.md](SIGNING_KEY_INCIDENT.md)：何时必须更换密钥，以及如何用 APK v3 密钥轮换保证已安装用户能继续升级。用一次性测试密钥演练过，`rotate` → `sign --lineage --rotation-min-sdk-version 28` → `verify` 的结果为 v3 签名者是新证书 |
+| `.gitignore` | Excludes `*.jks`, `*.keystore`, `*.p12`, `*.pfx`, `keystore.properties`, `device.secret`, `selfsigned.key` and `.env` across the whole repository |
+| `tools/package_release.py` | The only packaging entry:<br>• source takes only files tracked by git, then filters by a blocklist<br>• after packaging it runs the leak check automatically and deletes all artifacts if it fails<br>• refuses to overwrite an existing version directory |
+| Handling instructions | [SIGNING_KEY_INCIDENT.md](SIGNING_KEY_INCIDENT.md): when the key must be changed, and how APK v3 key rotation keeps installed users able to upgrade. Rehearsed with a throwaway test key: `rotate` → `sign --lineage --rotation-min-sdk-version 28` → `verify` shows the new certificate as the v3 signer |
 
-## 2. 凭据存储（本轮修复的实际问题）
+## 2. Credential storage (the real problems fixed this round)
 
-1.2.0 的 `SecretStore` 存在以下问题：
+1.2.0's `SecretStore` had these problems:
 
-| # | 1.2.0 的行为 | 风险 | 1.2.1 |
+| # | Behaviour in 1.2.0 | Risk | 1.2.1 |
 |---|---|---|---|
-| P1 | 密文存在但 Keystore 不可用时，**直接返回明文副本** | 静默以明文做远程认证 | 返回“无法解密”，拒绝认证 |
-| P2 | 解密失败时，**返回残留的明文副本** | 可能接受已经被替换的旧凭据 | 只认密文；解密失败就拒绝认证，绝不改用明文副本 |
-| P3 | 旧版明文无法迁移时，**继续使用明文** | 静默以明文做远程认证 | 保留明文、不丢配置，但在用户明确同意兼容模式之前不能用于认证 |
-| P4 | 加密写入失败或没有 Keystore 时，**静默写明文** | 静默降级 | 拒绝写入并给出错误；只有用户同意兼容模式后才写明文 |
+| P1 | When ciphertext exists but Keystore is unavailable, **returns the plain-text copy directly** | Silently authenticates remotely with plain text | Returns "cannot decrypt" and refuses authentication |
+| P2 | When decryption fails, **returns the leftover plain-text copy** | May accept an old credential that has already been replaced | Accepts only ciphertext; when decryption fails it refuses authentication and never falls back to the plain-text copy |
+| P3 | When old plain text cannot be migrated, **keeps using plain text** | Silently authenticates remotely with plain text | Keeps the plain text so no configuration is lost, but it cannot be used for authentication until the user explicitly agrees to compatibility mode |
+| P4 | When the encrypted write fails or there is no Keystore, **silently writes plain text** | Silent downgrade | Refuses to write and reports an error; plain text is written only after the user agrees to compatibility mode |
 
-### 兼容模式
+### Compatibility mode
 
-- 只能在“安全”页开启：先阅读风险说明，再勾选“我了解凭据将不加密保存的风险”，才能确认。
-- 开启后，主页和安全页持续显示红色警告。
-- 关闭兼容模式会删除所有明文凭据，并关闭使用明文设备密钥的中继。
+- Can only be turned on on the "Security" page: read the risk explanation first, then tick "I understand the risk that credentials will be stored unencrypted" before confirming.
+- Once on, the home screen and Security page keep showing a red warning.
+- Turning compatibility mode off deletes all plain-text credentials and turns off the relay that uses a plain-text device key.
 
-### 残留明文副本能否被继续接受
+### Can a leftover plain-text copy still be accepted?
 
-只要密文存在，就不会使用明文副本：
+As long as ciphertext exists, the plain-text copy is never used:
 
-- 密文解密成功：删除残留的明文副本；
-- 密文解密失败：拒绝认证，不改用明文副本；
-- 更换令牌：在同一次提交中写入新密文并删除明文，旧令牌立即失效。
+- ciphertext decrypts successfully: the leftover plain-text copy is deleted;
+- ciphertext fails to decrypt: authentication is refused, with no fallback to the plain-text copy;
+- changing the token: the new ciphertext is written and the plain text deleted in the same commit, and the old token stops working immediately.
 
-中继端只缓存手机上报的令牌哈希。手机更换令牌后会立即重连，在重连完成前的一两秒内，中继可能仍会放行旧令牌，但手机端会再校验一次并拒绝。
+The relay only caches the token hash the phone reported. After the phone changes its token it reconnects immediately; in the second or two before the reconnection completes, the relay may still let the old token through, but the phone checks again and refuses it.
 
-**测试**：Robolectric 中新增和改写了 16 个用例，覆盖迁移、中断恢复、两种不得回退的情况、兼容模式的同意与撤回、令牌轮换，以及在端点层面验证旧令牌、残留令牌都无法通过认证。
+**Tests**: 16 cases were added or rewritten in Robolectric, covering migration, recovery after interruption, the two must-not-fall-back cases, granting and withdrawing compatibility-mode consent, token rotation, and verifying at the endpoint level that neither the old token nor a leftover token can authenticate.
 
-**变异检查**：把 P2 修复回退成 1.2.0 的写法后，有 2 个用例失败，说明这些用例能抓住这个问题。
+**Mutation check**: reverting the P2 fix to the 1.2.0 code makes 2 cases fail, showing these cases catch the problem.
 
-## 3. 保持不变的部分
+## 3. What stays the same
 
-以下部分在本轮均已重新测试：
+All of the following were tested again this round:
 
-- 严格只读白名单（14 个工具）；
-- 默认只开启 5 个工具；
-- WSS 中继与证书固定；
-- MCP SDK 1.30.0 兼容。
+- the strict read-only allowlist (14 tools);
+- only 5 tools on by default;
+- the WSS relay and certificate pinning;
+- MCP SDK 1.30.0 compatibility.
 
-## 4. 剩余风险
+## 4. Remaining risks
 
-| 风险 | 等级 | 说明 / 缓解 |
+| Risk | Level | Notes / mitigation |
 |---|---|---|
-| 真机行为未验证 | 高（不确定性） | 以下项目都只在模拟环境中测试过：Keystore 迁移、OriginOS 等厂商系统的息屏与开机恢复、网络切换、前台应用识别准确性。清单见 DEVICE_CHECKLIST.md 的 G、H 两节 |
-| Keystore 有缺陷的设备 | 中 | 1.2.1 起这类设备默认无法使用远程认证，需要用户主动开启兼容模式。这是有意的安全取舍，代价是可用性 |
-| 签名密钥存放在开发电脑上 | 中 | 口令以明文保存在 `signing/keystore.properties`。建议离线加密备份，并按 SIGNING_KEY_INCIDENT.md §5 定期检查 |
-| Android 8.0 / 8.1 无法受益于密钥轮换 | 低 | 仅在密钥真的泄露时才有影响；处理方式见 SIGNING_KEY_INCIDENT.md §4.5 |
-| 中继在 TLS 终止后能看到令牌 | 低 | 中继部署在用户自己的 VPS 上，并且只监听本机 |
-| 本地端点没有 TLS | 低 | 只监听回环地址，仍需要 256 bit 令牌 |
-| 旧版 Python SDK（1.8.0）在中继不可达时会挂起 | 低 | 属于客户端问题，建议使用 SDK 1.30 并在外层设置超时。本轮没有重跑 1.8.0 |
+| Behaviour on real phones not verified | High (uncertainty) | All of these were only tested in simulated environments: Keystore migration, screen-off and boot recovery on vendor systems such as OriginOS, network switching, accuracy of foreground app detection. The checklist is in sections G and H of DEVICE_CHECKLIST.md |
+| Devices with a faulty Keystore | Medium | Since 1.2.1 such devices cannot use remote authentication by default, and the user must turn on compatibility mode deliberately. This is an intentional security trade-off at the cost of usability |
+| The signing key is stored on the development computer | Medium | The password is stored in plain text in `signing/keystore.properties`. An encrypted offline backup is recommended, with regular checks per SIGNING_KEY_INCIDENT.md §5 |
+| Android 8.0 / 8.1 cannot benefit from key rotation | Low | Only matters if the key really leaks; handling in SIGNING_KEY_INCIDENT.md §4.5 |
+| The relay can see the token after TLS termination | Low | The relay is deployed on the user's own VPS and listens only locally |
+| The local endpoint has no TLS | Low | Listens only on loopback and still needs the 256-bit token |
+| The old Python SDK (1.8.0) hangs when the relay is unreachable | Low | A client-side problem; SDK 1.30 with an outer timeout is recommended. 1.8.0 was not re-run this round |

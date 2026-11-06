@@ -2,6 +2,8 @@
 
 # Violet MCP (read-only phone state for Android)
 
+**English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Русский](README.ru.md) | [Português](README.pt-BR.md)
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android_8.0+-3DDC84?logo=android&logoColor=white)](#)
 [![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-blue)](https://modelcontextprotocol.io/)
@@ -25,7 +27,7 @@ Based on [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), with these
 
 Current version: app **Violet MCP 1.4.2** (package `com.mcp.server.violet`), relay **violet-mcp-relay 1.2.0**.
 
-The app's interface is in Chinese. In this README, screen names are given in English with the Chinese label in brackets, e.g. **Tools & permissions** (工具与权限).
+The app's interface is currently in Chinese.
 
 ## Features
 
@@ -34,7 +36,7 @@ The app's interface is in Chinese. In this README, screen names are given in Eng
   - Command execution, Shizuku, JavaScript, file reading and writing, app control, clipboard, reading notifications and arbitrary HTTP requests have been removed from the source code. They do not appear in `tools/list` and cannot be called.
 - **A switch for every tool**:
   - Only 7 non-sensitive tools are on by default: battery, screen state, foreground app, display info, health check, next alarm, headphones / Bluetooth.
-  - Usage time, now playing, network and place, steps, calendar, installed apps, device identifiers and others have to be turned on by you on the phone's **Tools & permissions** (工具与权限) page. Each tool says what she can know once it is on, and the ones that need a system permission have a **Grant** (去授权) button.
+  - Usage time, now playing, network and place, steps, calendar, installed apps, device identifiers and others have to be turned on by you on the phone's **Tools & permissions** page. Each tool says what she can know once it is on, and the ones that need a system permission have a **Grant** button.
   - MCP requests cannot change these switches.
 - **No guessing**: when the screen is off, the phone is locked or the answer is uncertain, it does not guess which app you are using, and says why.
 - **Places only by the names you give**: you can name a Wi-Fi network, e.g. "home" or "office". The Wi-Fi name (SSID) is only compared on the phone and is never sent out.
@@ -51,30 +53,30 @@ The app's interface is in Chinese. In this README, screen names are given in Eng
   - Uses a `specialUse` foreground service.
   - The service has three states: running, restricted and stopped. Once you stop it by hand, it is not started again automatically.
 - **In-app updates**:
-  - **Settings → App updates** (设置 → 应用更新): choose "automatic" (default), "notify only" or "check manually".
+  - **Settings → App updates**: choose "automatic" (default), "notify only" or "check manually".
   - Downloads only from this repository's GitHub Releases, then checks `SHA256SUMS.txt`, the package name, the version number and the signing certificate; if any of them is wrong, nothing is installed.
   - The first time, you need to allow this app to "install unknown apps" in the system settings.
 - **No root, no accessibility permission.**
 
-> Used daily on real phones. Each manufacturer limits background apps differently, so after the first install it is worth going through [docs/DEVICE_CHECKLIST.md](docs/DEVICE_CHECKLIST.md) (Chinese): unrestricted battery, start on boot, still connected with the screen off.
+> Used daily on real phones. Each manufacturer limits background apps differently, so after the first install it is worth going through [docs/DEVICE_CHECKLIST.md](docs/DEVICE_CHECKLIST.md): unrestricted battery, start on boot, still connected with the screen off.
 
 ## Quick start
 
 **1. Install the relay on your server**
 
-- Violet installed with the one-line command (recommended): on the Violet control panel's **Tools & phone** (工具与手机) page, click **Install relay** (一键安装中继). When it is done, the page lists the relay address, device key and certificate fingerprint to enter on the phone, each with a copy button.
+- Violet installed with the one-line command (recommended): on the Violet control panel's **Tools & phone** page, click **Install relay**. When it is done, the page lists the relay address, device key and certificate fingerprint to enter on the phone, each with a copy button.
 - Otherwise: deploy it by hand following [docs/DEPLOY_RELAY.md](docs/DEPLOY_RELAY.md).
 
 **2. Install and set up the app on your phone**
 
 1. Install the latest `violet-mcp-<version>-release.apk` from [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) (the app is called "Violet MCP"). Later versions can be updated from inside the app.
-2. Open the app → **Settings → Permissions** (设置 → 权限): allow "usage access", and turning on "unrestricted battery" is recommended too. Then choose the tools to share with Violet on the **Tools & permissions** page.
-3. Under **Remote access** (远程访问), enter the relay address, device key and certificate fingerprint from step 1 and turn the connection on.
-4. Go back to the home screen and tap **Start** (启动).
+2. Open the app → **Settings → Permissions**: allow "usage access", and turning on "unrestricted battery" is recommended too. Then choose the tools to share with Violet on the **Tools & permissions** page.
+3. Under **Remote access**, enter the relay address, device key and certificate fingerprint from step 1 and turn the connection on.
+4. Go back to the home screen and tap **Start**.
 
 **3. Connect it to Violet**
 
-Copy the access token on the phone's **Security** (安全) page and paste it into the **Tools & phone** page of the Violet control panel. That's it. If you deployed the relay by hand, add the MCP server as described in [docs/VIOLET_INTEGRATION.md](docs/VIOLET_INTEGRATION.md).
+Copy the access token on the phone's **Security** page and paste it into the **Tools & phone** page of the Violet control panel. That's it. If you deployed the relay by hand, add the MCP server as described in [docs/VIOLET_INTEGRATION.md](docs/VIOLET_INTEGRATION.md).
 
 **Local debugging** (without the relay):
 
@@ -84,8 +86,6 @@ python tests/interop/test_mcp_interop.py --url http://127.0.0.1:1145/mcp --token
 ```
 
 ## Documentation
-
-The documents below are in Chinese.
 
 | Document | Contents |
 |---|---|
@@ -181,7 +181,7 @@ python tests/verify_apk.py --apk app/build/outputs/apk/debug/violet-mcp-<version
 
 Official release packages are made with `tools/package_release.py`, which also checks for leaked secrets.
 
-Windows tip: if your user folder name contains Chinese (or other non-ASCII) characters, Gradle's test workers may fail to start (`GradleWorkerMain` not found). Set `GRADLE_USER_HOME` to an ASCII-only path, e.g. `set GRADLE_USER_HOME=D:\gradle-home`.
+Windows tip: if your user folder name contains non-ASCII characters, Gradle's test workers may fail to start (`GradleWorkerMain` not found). Set `GRADLE_USER_HOME` to an ASCII-only path, e.g. `set GRADLE_USER_HOME=D:\gradle-home`.
 
 ## Credits and license
 

@@ -1,180 +1,182 @@
-# 升级与回退
+# Upgrading and rolling back
 
-## Violet MCP 1.3.0 → 1.4.0（应用内更新；中继不变）
+**English** | [简体中文](UPGRADE.zh-CN.md)
 
-- 直接覆盖安装 `violet-mcp-1.4.0-release.apk`（包名、签名都与 1.3.0 相同）：令牌、中继配置、工具开关都保留，Violet 那边不用改。
-- 新增：设置 → 应用更新。默认“自动更新”：每 6 小时检查 GitHub Releases，有新版本就下载、核对 SHA-256 / 包名 / 版本 / 签名证书，再交给系统安装（通常要你点一次“更新”）。可改成“只提醒”或“手动检查”。
-- 新增权限 `REQUEST_INSTALL_PACKAGES`：要在系统设置里为本应用打开“安装未知应用”才能装更新；不打开也不影响 MCP 服务，只是更新要自己下载安装。
-- 应用会访问 `api.github.com`、`github.com` 和 GitHub 的下载服务器（不登录、不上传任何数据）；“手动检查”模式下只在你点按钮时访问。
-- 回退：卸载后装 1.3.0（数据会清空，要重新配置），或用 `adb install -r -d`（降级安装，数据保留与否取决于系统）。
+## Violet MCP 1.3.0 → 1.4.0 (in-app updates; relay unchanged)
 
-## 1.2.2-eve → Violet MCP 1.3.0 / 中继 1.2.0（改名；工具和安全规则都不变）
+- Install `violet-mcp-1.4.0-release.apk` over the old one (same package name and signature as 1.3.0): token, relay configuration and tool switches are all kept, and nothing changes on Violet's side.
+- New: Settings → App updates. Default "automatic": checks GitHub Releases every 6 hours, and when there is a new version it downloads it, checks SHA-256 / package name / version / signing certificate, then hands it to the system to install (usually you tap "Update" once). Can be changed to "notify only" or "check manually".
+- New permission `REQUEST_INSTALL_PACKAGES`: "Install unknown apps" must be turned on for this app in the system settings before updates can be installed; without it the MCP service still works, you just download and install updates yourself.
+- The app accesses `api.github.com`, `github.com` and GitHub's download servers (no login, no data uploaded); in "check manually" mode only when you tap the button.
+- Rolling back: uninstall and install 1.3.0 (data is wiped and has to be configured again), or use `adb install -r -d` (a downgrade install; whether data is kept depends on the system).
 
-1.3.0 只改名字：应用名“Violet MCP”、包名 `com.mcp.server.violet`、发布文件 `violet-mcp-<版本>-release.apk`；中继改名 `violet-mcp-relay`（1.2.0），环境变量改为 `VIOLET_RELAY_DEVICE_SECRET`（旧名 `EVE_RELAY_DEVICE_SECRET` 仍然认）。14 个只读工具、权限、鉴权、TLS 和签名密钥都没有变化。
+## 1.2.2-eve → Violet MCP 1.3.0 / relay 1.2.0 (rename; tools and security rules unchanged)
 
-**手机**：包名变了，系统把 1.3.0 当作另一个应用，**不能覆盖安装**旧的“Eve 只读 MCP”（`com.mcp.server.eve`）。
+1.3.0 only changes names: app name "Violet MCP", package name `com.mcp.server.violet`, release file `violet-mcp-<version>-release.apk`; the relay is renamed `violet-mcp-relay` (1.2.0), and the environment variable becomes `VIOLET_RELAY_DEVICE_SECRET` (the old name `EVE_RELAY_DEVICE_SECRET` is still recognised). The 14 read-only tools, permissions, authentication, TLS and signing key are all unchanged.
 
-1. 安装 `violet-mcp-1.3.0-release.apk`（可以和旧应用同时存在）。
-2. 在新应用里重新开启“使用情况访问权限”，填写中继地址、设备密钥、证书指纹（和旧应用填的一样即可），开启中继。
-3. 在“安全”页复制新的访问令牌，到 Violet 后台“工具”页把 `android-phone` 服务器的 `Authorization` 改成新令牌。
-4. 确认 Violet 能调用以后，在旧应用里关闭中继，然后卸载旧应用（两个应用同时连同一个中继时，后连上的会替换先连上的）。
+**Phone**: the package name changed, so the system treats 1.3.0 as a different app, and it **cannot be installed over** the old "Eve read-only MCP" (`com.mcp.server.eve`).
 
-**中继**（在 VPS 上，root）。想保留原来的证书和设备密钥（手机就不用改证书指纹）时，先把旧数据目录复制过去：
+1. Install `violet-mcp-1.3.0-release.apk` (it can live alongside the old app).
+2. In the new app, turn on "Usage access" again, enter the relay address, device key and certificate fingerprint (the same as in the old app), and turn the relay on.
+3. Copy the new access token on the "Security" page, and on Violet's Tools page change the `Authorization` of the `android-phone` server to the new token.
+4. Once Violet can call it, turn off the relay in the old app, then uninstall the old app (when two apps connect to the same relay, the later one replaces the earlier one).
+
+**Relay** (on the VPS, as root). To keep the old certificate and device key (so the phone does not need a new certificate fingerprint), copy the old data directory first:
 
 ```bash
 systemctl disable --now eve-mcp-relay
-cp -a /var/lib/private/eve-mcp-relay /var/lib/private/violet-mcp-relay   # DynamicUser 的数据在 /var/lib/private 下
+cp -a /var/lib/private/eve-mcp-relay /var/lib/private/violet-mcp-relay   # DynamicUser data lives under /var/lib/private
 mkdir -p /opt/violet-mcp-relay
 ARCH=$( [ "$(uname -m)" = aarch64 ] && echo arm64 || echo amd64 )
 install -m 0755 /root/violet-mcp-relay-1.2.0-linux-$ARCH /opt/violet-mcp-relay/violet-mcp-relay
 install -m 0644 /root/violet-mcp-relay.service /etc/systemd/system/violet-mcp-relay.service
 systemctl daemon-reload && systemctl enable --now violet-mcp-relay
-journalctl -u violet-mcp-relay -n 20 --no-pager      # 证书指纹应与以前相同
+journalctl -u violet-mcp-relay -n 20 --no-pager      # the certificate fingerprint should be the same as before
 ```
 
-不复制数据目录也可以：新中继会生成新的证书和设备密钥，按 [DEPLOY_RELAY.md](DEPLOY_RELAY.md) 第 3 步取得三项，在手机上重新填写。确认无误后可以删除旧的 `/opt/eve-mcp-relay`、`/etc/systemd/system/eve-mcp-relay.service`。
+You can also skip copying the data directory: the new relay generates a new certificate and device key; get the three values as in step 3 of [DEPLOY_RELAY.md](DEPLOY_RELAY.md) and enter them on the phone again. Once everything works, the old `/opt/eve-mcp-relay` and `/etc/systemd/system/eve-mcp-relay.service` can be deleted.
 
-以上步骤**尚未在真机和真实 VPS 上执行过**。
+These steps **have not yet been carried out on a real phone and a real VPS**.
 
-下面是 1.3.0 之前各版本的升级记录（文件名、包名用的是当时的名字）。
+Below are the upgrade records of versions before 1.3.0 (file and package names are the names of that time).
 
-## 1.2.1-eve → 1.2.2-eve（签名密钥轮换；手机和中继功能都不变）
+## 1.2.1-eve → 1.2.2-eve (signing key rotation; phone and relay functions unchanged)
 
-1.2.2 没有功能变化，只做了两件事：
+1.2.2 has no functional changes; it did only two things:
 
-- 签名密钥轮换，原因是旧密钥随完整工作目录 ZIP 外泄（见 SIGNING_KEY_INCIDENT.md §6）；
-- 新增安全的源码交接打包。
+- rotated the signing key, because the old key leaked with a ZIP of the whole working directory (see SIGNING_KEY_INCIDENT.md §6);
+- added safe source handoff packaging.
 
-中继仍然是 1.1.0，不需要更新。
+The relay is still 1.1.0 and needs no update.
 
-**升级（手机）**：直接覆盖安装 `dist/v1.2.2-eve/eve-readonly-mcp-1.2.2-eve-release.apk`。可以从 1.1.0、1.2.0 或 1.2.1 直接升级，数据保留（令牌、中继配置、工具开关都不变）：
+**Upgrade (phone)**: install `dist/v1.2.2-eve/eve-readonly-mcp-1.2.2-eve-release.apk` over the old one. It can upgrade directly from 1.1.0, 1.2.0 or 1.2.1, keeping data (token, relay configuration and tool switches unchanged):
 
-| 手机系统 | 能否覆盖安装 | 原因 |
+| Phone system | Can install over | Why |
 |---|---|---|
-| Android 9+（API 28+） | 可以 | APK 带有旧证书 → 新证书的轮换证明（v3 lineage），系统据此确认是同一开发者 |
-| Android 8.0 / 8.1 | 可以 | 这些系统只校验 v2 签名，而 v2 仍由旧密钥签名。但这也意味着它们**无法受到轮换保护** |
+| Android 9+ (API 28+) | Yes | The APK carries a rotation proof from the old certificate to the new one (v3 lineage), from which the system confirms it is the same developer |
+| Android 8.0 / 8.1 | Yes | These systems only check the v2 signature, and v2 is still signed with the old key. This also means they **cannot benefit from the rotation's protection** |
 
-以上结论来自 apksigner 的校验结果和 Android 的签名规则，**尚未在真机上验证**（见 DEVICE_CHECKLIST.md A8–A10）。
+These conclusions come from apksigner's verification results and Android's signing rules, and **have not been verified on a real phone yet** (see DEVICE_CHECKLIST.md A8–A10).
 
-**升级后请尽快**：
+**After upgrading, as soon as possible**:
 
-- 所有手机都装上 1.2.2，轮换只对已安装 1.2.2 的设备生效；
-- 删除所有 `mcp-server.zip` 副本；
-- 只从 `dist/` 获取 APK。
+- install 1.2.2 on every phone; the rotation only takes effect on devices with 1.2.2 installed;
+- delete every copy of `mcp-server.zip`;
+- get APKs only from `dist/`.
 
-**回退到 1.2.1 或更早版本**：Android 9+ 手机装上 1.2.2 之后，只用旧密钥签名的 1.2.1 **不能覆盖安装**。这是轮换的保护作用：旧密钥在轮换证明中没有授予回退能力。另外，版本号更低的 APK 本来也不能覆盖安装。因此回退必须先卸载，本机配置会丢失，需要重新填写中继信息，Eve 也要改用新令牌。
+**Rolling back to 1.2.1 or earlier**: once an Android 9+ phone has 1.2.2, 1.2.1, signed only with the old key, **cannot be installed over it**. This is the rotation's protection at work: the rotation proof does not grant the old key rollback capability. Besides, an APK with a lower version number cannot be installed over a higher one anyway. So rolling back requires uninstalling first; the local configuration is lost, the relay details have to be entered again, and Eve has to switch to the new token.
 
-**不建议回退**：1.2.1 及更早版本是用已经外泄的旧密钥单独签名的。
+**Rolling back is not recommended**: 1.2.1 and earlier were signed only with the old key that has leaked.
 
-**开发者构建方式变化**：
+**Changes to developer builds**:
 
-- 存在 `signing/rotation.properties` 时，`gradlew :app:assembleRelease` 只产出未签名包，需要再运行 `python tools/sign_release.py <apk>`；
-- 发布用 `tools/package_release.py`，源码交接用 `tools/make_handoff.py`，见 HANDOFF.md。
+- when `signing/rotation.properties` exists, `gradlew :app:assembleRelease` only produces an unsigned package, and `python tools/sign_release.py <apk>` must be run afterwards;
+- releases use `tools/package_release.py` and source handoffs use `tools/make_handoff.py`; see HANDOFF.md.
 
 ---
 
-## 1.2.0-eve → 1.2.1-eve（只更新手机，中继不变）
+## 1.2.0-eve → 1.2.1-eve (phone only, relay unchanged)
 
-**升级**：直接覆盖安装 `dist/v1.2.1-eve/eve-readonly-mcp-1.2.1-eve-release.apk`。签名与 1.1.0、1.2.0 相同，数据保留。也可以从 1.1.0 直接升级。
+**Upgrade**: install `dist/v1.2.1-eve/eve-readonly-mcp-1.2.1-eve-release.apk` over the old one. Same signature as 1.1.0 and 1.2.0, data kept. Upgrading directly from 1.1.0 also works.
 
-**行为变化（安全修复）**：
+**Behaviour changes (security fixes)**:
 
-| 情况 | 1.2.0 | 1.2.1 |
+| Situation | 1.2.0 | 1.2.1 |
 |---|---|---|
-| Keystore 正常（绝大多数手机） | 加密保存 | 不变：加密保存，令牌不变 |
-| Keystore 不可用，或旧版明文令牌无法迁移 | 静默改为明文保存，继续接受认证 | **停用远程认证**，主页显示红色提示；旧令牌保留在本机但暂不可用。需要在“安全”页阅读风险说明、勾选同意兼容模式后才恢复，之后持续显示警告 |
-| 已保存的密文无法解密 | 如果有残留的明文副本，改用明文副本 | 拒绝认证，不使用任何明文副本；需要在“安全”页更换令牌（并更新 Eve 配置），在“设置”中重新填写设备密钥 |
+| Keystore works (the vast majority of phones) | Stored encrypted | Unchanged: stored encrypted, token unchanged |
+| Keystore unavailable, or an old plain-text token cannot be migrated | Silently switches to plain-text storage and keeps accepting authentication | **Remote authentication is disabled** and the home screen shows a red notice; the old token stays on the phone but is unusable for now. It comes back only after reading the risk explanation on the "Security" page and ticking consent to compatibility mode, after which a warning stays visible |
+| The stored ciphertext cannot be decrypted | Falls back to a leftover plain-text copy if one exists | Refuses authentication and never uses any plain-text copy; change the token on the "Security" page (and update Eve's configuration) and enter the device key again in "Settings" |
 
-**升级后的检查**：打开 App 看主页有没有红色的“凭据”提示卡片。没有提示时，一切与 1.2.0 相同。
+**Check after upgrading**: open the app and see whether the home screen has a red "credentials" notice card. Without a notice, everything is the same as in 1.2.0.
 
-**回退到 1.2.0**：Android 不允许降低版本号覆盖安装，必须卸载后再安装 `dist/v1.2.0-eve/eve-readonly-mcp-1.2.0-eve-release.apk`。卸载会清空本机配置，需要重新填写中继信息，令牌也会变化（Eve 配置要同步修改）。除非 1.2.1 出现阻断性问题，否则不建议回退，因为 1.2.0 存在上表中的问题。
+**Rolling back to 1.2.0**: Android does not allow installing a lower version number over a higher one, so uninstall and then install `dist/v1.2.0-eve/eve-readonly-mcp-1.2.0-eve-release.apk`. Uninstalling wipes the local configuration, the relay details have to be entered again, and the token changes too (Eve's configuration has to be updated to match). Rolling back is not recommended unless 1.2.1 has a blocking problem, because 1.2.0 has the problems in the table above.
 
-**发布方式变化**：今后的发布包一律用 `tools/package_release.py` 生成，并经 `tests/check_release_artifacts.py` 检查。签名密钥的处理见 [SIGNING_KEY_INCIDENT.md](SIGNING_KEY_INCIDENT.md)。
+**Changes to releasing**: from now on all release packages are generated with `tools/package_release.py` and checked with `tests/check_release_artifacts.py`. How the signing key is handled is in [SIGNING_KEY_INCIDENT.md](SIGNING_KEY_INCIDENT.md).
 
 ---
 
-# 1.1.0-eve → 1.2.0-eve，中继 1.0.0 → 1.1.0
+# 1.1.0-eve → 1.2.0-eve, relay 1.0.0 → 1.1.0
 
-## 兼容性
+## Compatibility
 
-新旧版本混合使用已在电脑上测试过（见 TEST_REPORT §1.3 混合版本），**先升级哪一端都可以**：
+Mixing old and new versions was tested on a PC (see TEST_REPORT §1.3 mixed versions), so **either side can be upgraded first**:
 
-| 手机 | 中继 | 结果 |
+| Phone | Relay | Result |
 |---|---|---|
-| 1.2.0 | 1.0.0 | 可用；中继不发应用层心跳，手机端看门狗不启用，靠手机侧 WebSocket ping（默认 60 秒）检测断线；Eve 收不到 Server-Timing |
-| 1.1.0 | 1.1.0 | 可用；旧手机会回应中继的心跳；没有 1.2 新增的手机端检查（批量上限、jsonrpc 版本校验、手机侧耗时） |
-| 1.2.0 | 1.1.0 | 推荐组合 |
+| 1.2.0 | 1.0.0 | Works; the relay sends no application-level heartbeat, so the phone's watchdog stays off and disconnects are detected by the phone-side WebSocket ping (default 60 seconds); Eve gets no Server-Timing |
+| 1.1.0 | 1.1.0 | Works; the old phone answers the relay's heartbeat; none of the phone-side checks new in 1.2 (batch limit, jsonrpc version check, phone-side timing) |
+| 1.2.0 | 1.1.0 | Recommended combination |
 
-## 升级后会变化的行为
+## Behaviour that changes after upgrading
 
-| 变化 | 影响 | 处理 |
+| Change | Effect | What to do |
 |---|---|---|
-| 工具隐私开关默认值 | 1.1.0 中**没有手动改过**的工具，按新默认值处理：只开 `battery`、`get_foreground_app`、`get_screen_state`、`screen_info`、`health` | 需要使用时长等工具时，到“工具与权限”页开启 |
-| `get_foreground_app` 返回格式 | 由 `status/isCurrent/packageName/...` 改为 `state/app/package/observed_at/age_seconds`；非 current 状态不再给出应用 | Eve 的提示词或解析逻辑如果依赖旧字段，需要调整（MCP 工具描述里已有说明，模型一般能直接读懂） |
-| “局域网访问”删除 | 1.1.0 开过局域网访问的，升级后本地端点只监听 127.0.0.1 | 改用 TLS 中继 |
-| 令牌加密存储 | 第一次读取时自动迁移，**令牌值不变** | 无需处理 |
-| 开机自启 | 用户点过“停止”后，开机和应用更新都不会再自动启动 | 想恢复时在 App 中点“启动” |
-| 中继默认超时 | 等待手机响应的超时由 60 秒改为 20 秒；新增离线等待 5 秒、心跳 30 秒 | 可用 `-request-timeout`、`-offline-wait`、`-ping-interval` 调整 |
-| 中继非回环明文监听 | 以前只打印警告，现在**拒绝启动** | 改成 127.0.0.1，或加 `-client-tls` |
-| 中继的设备侧错误 | 手机离线 / 超时由 HTTP 503/504 改为 HTTP 200 + JSON-RPC 错误 | Eve 不需要改；会话不再因此中断 |
+| Default privacy switches of tools | Tools **never changed by hand** in 1.1.0 follow the new defaults: only `battery`, `get_foreground_app`, `get_screen_state`, `screen_info` and `health` are on | To use usage time and other tools, turn them on on the "Tools & permissions" page |
+| `get_foreground_app` return format | Changed from `status/isCurrent/packageName/...` to `state/app/package/observed_at/age_seconds`; non-current states no longer give an app | If Eve's prompts or parsing depend on the old fields, adjust them (the MCP tool description explains it, and models can usually read it directly) |
+| "LAN access" removed | If LAN access was on in 1.1.0, after the upgrade the local endpoint listens only on 127.0.0.1 | Use the TLS relay instead |
+| Encrypted token storage | Migrated automatically on first read; **the token value does not change** | Nothing to do |
+| Start on boot | After the user tapped "Stop", neither boot nor an app update starts it automatically any more | To restore, tap "Start" in the app |
+| Relay default timeouts | The timeout waiting for the phone's response went from 60 to 20 seconds; new offline wait of 5 seconds and heartbeat of 30 seconds | Adjust with `-request-timeout`, `-offline-wait`, `-ping-interval` |
+| Relay plain-text listening on non-loopback | Used to print only a warning; now **refuses to start** | Change to 127.0.0.1, or add `-client-tls` |
+| Relay device-side errors | Phone offline / timeout changed from HTTP 503/504 to HTTP 200 + a JSON-RPC error | Eve needs no change; the session is no longer interrupted by this |
 
-## 升级步骤
+## Upgrade steps
 
-### 1. 中继（VPS）
+### 1. Relay (VPS)
 
-先在 Windows 电脑上上传新程序（只改 `$VPS` 这一处）：
+First upload the new program from the Windows computer (change only `$VPS`):
 
 ```powershell
-$VPS = "root@你的VPS地址"
+$VPS = "root@your-vps-address"
 scp D:\Claude\mcp-server\dist\v1.2.0-eve\eve-mcp-relay-1.1.0-linux-amd64 D:\Claude\mcp-server\relay\deploy\eve-mcp-relay.service "${VPS}:/root/"
 ssh $VPS
 ```
 
-再在 VPS 上执行。旧程序会保留为 `eve-mcp-relay-1.0.0`，用于回退：
+Then run on the VPS. The old program is kept as `eve-mcp-relay-1.0.0` for rolling back:
 
 ```bash
 cp /opt/eve-mcp-relay/eve-mcp-relay /opt/eve-mcp-relay/eve-mcp-relay-1.0.0
 install -m 0755 /root/eve-mcp-relay-1.1.0-linux-amd64 /opt/eve-mcp-relay/eve-mcp-relay
-# 新的 systemd 配置与旧版相同（监听 127.0.0.1:8787 和 :8443）；如果你改过 ExecStart，保留自己的版本
+# The new systemd configuration is the same as the old (listening on 127.0.0.1:8787 and :8443); if you changed ExecStart, keep your own version
 systemctl restart eve-mcp-relay
-journalctl -u eve-mcp-relay -n 20 --no-pager     # 应看到 "eve-mcp-relay 1.1.0" 和 timers 一行
-curl -s http://127.0.0.1:8787/health; echo       # 手机重连后 deviceConnected 为 true
+journalctl -u eve-mcp-relay -n 20 --no-pager     # should show "eve-mcp-relay 1.1.0" and a timers line
+curl -s http://127.0.0.1:8787/health; echo       # deviceConnected is true once the phone reconnects
 ```
 
-如果启动失败并提示 `refusing to start`，说明 `-client-listen` 配成了非回环地址且没有开 TLS。按提示修改 `/etc/systemd/system/eve-mcp-relay.service` 后执行 `systemctl daemon-reload && systemctl restart eve-mcp-relay`。
+If it fails to start with `refusing to start`, `-client-listen` is set to a non-loopback address without TLS. Fix `/etc/systemd/system/eve-mcp-relay.service` as the message says, then run `systemctl daemon-reload && systemctl restart eve-mcp-relay`.
 
-### 2. 手机
+### 2. Phone
 
-直接覆盖安装 `eve-readonly-mcp-1.2.0-eve-release.apk`（签名与 1.1.0 相同，数据保留）。安装后：
+Install `eve-readonly-mcp-1.2.0-eve-release.apk` over the old one (same signature as 1.1.0, data kept). After installing:
 
-1. 打开 App，确认主页显示“服务运行中”，远程访问显示“已连接”。
-2. 打开“安全”页，确认令牌显示“用 Android Keystore 加密保存”。
-3. 打开“工具与权限”页，按需开启敏感工具。
+1. Open the app and check that the home screen shows "Service running" and remote access shows "Connected".
+2. Open the "Security" page and check that the token shows "stored encrypted with Android Keystore".
+3. Open the "Tools & permissions" page and turn on sensitive tools as needed.
 
-## 回退
+## Rolling back
 
-### 中继回退到 1.0.0
+### Relay back to 1.0.0
 
 ```bash
 install -m 0755 /opt/eve-mcp-relay/eve-mcp-relay-1.0.0 /opt/eve-mcp-relay/eve-mcp-relay
 systemctl restart eve-mcp-relay
 ```
 
-device.secret 和自签证书都在 `/var/lib/eve-mcp-relay`，两个版本通用，手机配置不用改。
+device.secret and the self-signed certificate are both in `/var/lib/eve-mcp-relay` and work with both versions, so the phone configuration needs no change.
 
-### 手机回退到 1.1.0
+### Phone back to 1.1.0
 
-Android 不允许直接覆盖安装版本号更低的 APK，**回退必须先卸载**，所以本机配置会丢失：
+Android does not allow installing an APK with a lower version number directly over a higher one, so **rolling back requires uninstalling first**, and the local configuration is lost:
 
-1. 打开 1.2.0，在“安全”页复制访问令牌，并记下中继地址、设备密钥（在 VPS 上 `cat /var/lib/eve-mcp-relay/device.secret`）和证书指纹。
-2. 卸载 1.2.0，安装 `dist/eve-readonly-mcp-1.1.0-eve-release.apk`。
-3. 在 1.1.0 中重新填写中继配置。旧版无法导入原令牌，会生成新令牌，所以 **Project Eve 的 Authorization 需要改成 1.1.0 显示的新令牌**。
-4. 1.1.0 的已知问题：工具默认全部开启；令牌明文存储；用户停止服务后仍可能被应用更新广播拉起（见 REVIEW_v1.2.md R4）。
+1. Open 1.2.0, copy the access token on the "Security" page, and note the relay address, device key (`cat /var/lib/eve-mcp-relay/device.secret` on the VPS) and certificate fingerprint.
+2. Uninstall 1.2.0 and install `dist/eve-readonly-mcp-1.1.0-eve-release.apk`.
+3. Enter the relay configuration again in 1.1.0. The old version cannot import the original token and generates a new one, so **Project Eve's Authorization must be changed to the new token shown by 1.1.0**.
+4. Known problems of 1.1.0: all tools on by default; token stored in plain text; after the user stops the service it can still be started by the app-update broadcast (see REVIEW_v1.2.md R4).
 
-### 产物
+### Artifacts
 
-- **1.1.0 稳定版文件**在 `dist/` 根目录，没有被覆盖：
+- **The 1.1.0 stable files** are in the root of `dist/` and were not overwritten:
   - `eve-readonly-mcp-1.1.0-eve-release.apk`
-  - `eve-mcp-relay-linux-amd64`（1.0.0）
-  - 源码包
-- **1.2.0 文件**都在 `dist/v1.2.0-eve/` 目录下，文件名带版本号。
+  - `eve-mcp-relay-linux-amd64` (1.0.0)
+  - source package
+- **The 1.2.0 files** are all in `dist/v1.2.0-eve/`, with version numbers in their file names.

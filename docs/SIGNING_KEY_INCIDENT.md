@@ -1,60 +1,62 @@
-# 签名密钥泄露处理说明
+# Handling a signing key leak
 
-适用于 Eve 只读 MCP 的 release 签名密钥：`signing/eve-release.jks`（PKCS#12，EC P-256，别名 `eve-release`），口令保存在 `signing/keystore.properties`。
+**English** | [简体中文](SIGNING_KEY_INCIDENT.zh-CN.md)
 
-## 1. 现状核查（2026-10-10）
+Applies to the release signing key of the Eve read-only MCP: `signing/eve-release.jks` (PKCS#12, EC P-256, alias `eve-release`), with the password stored in `signing/keystore.properties`.
 
-| 检查项 | 结果 |
+## 1. Status check (2026-10-10)
+
+| Check | Result |
 |---|---|
-| 历史发布包：1.1.0 源码包与 APK、1.2.0 源码包与 APK、5 个中继程序 | `tests/check_release_artifacts.py dist` 检查了 11 个产物、378 个文件（含 jar 等嵌套包），**未发现**签名密钥、PEM 私钥块、密钥库结构，也没有出现真实口令 |
-| git 索引 | 不含 `signing/`、`*.jks`、`*.keystore`、`keystore.properties`、`local.properties` |
-| 检查脚本自检 | 把真实 `.jks` 和 `keystore.properties` 放进测试 zip，或把 `.jks` 改名为 `renamed.bin`，都能被检出 |
+| Historical release packages: 1.1.0 source package and APK, 1.2.0 source package and APK, 5 relay programs | `tests/check_release_artifacts.py dist` checked 11 artifacts and 378 files (including nested packages such as jars) and **found no** signing key, PEM private key block or keystore structure, and no real password |
+| git index | Does not contain `signing/`, `*.jks`, `*.keystore`, `keystore.properties` or `local.properties` |
+| Self-test of the check script | Putting the real `.jks` and `keystore.properties` into a test zip, or renaming the `.jks` to `renamed.bin`, was always detected |
 
-> **更新（同日稍后）**：随后发现完整工作目录 ZIP 外泄了密钥和口令，已执行轮换，见第 6 节。下面是当时的核查结论，保留作记录。
+> **Update (later the same day)**: it was then found that a ZIP of the whole working directory had leaked the key and password; the key has been rotated, see section 6. Below is the conclusion of the check at the time, kept for the record.
 
-**结论（当时）**：目前没有证据表明签名密钥已经泄露，所以不需要立即更换。本轮做的是加固：
+**Conclusion (at the time)**: there was no evidence that the signing key had leaked, so it did not need to be changed immediately. This round did hardening:
 
-- `.gitignore` 在全仓库范围排除密钥文件，不只排除 `signing/` 目录；
-- 发布一律经 `tools/package_release.py` 打包：源码只取 git 跟踪的文件，再按黑名单过滤一次，打包完成后自动做泄密检查，不通过就删除全部产物。
+- `.gitignore` excludes key files across the whole repository, not just the `signing/` directory;
+- every release is packaged by `tools/package_release.py`: source takes only files tracked by git, filtered once more by a blocklist, and after packaging a leak check runs automatically and deletes all artifacts if it fails.
 
-已经发出去的旧包可以随时复查：
+Packages already sent out can be re-checked at any time:
 
 ```bash
 python -I -X utf8 tests/check_release_artifacts.py dist
 ```
 
-## 2. 密钥泄露意味着什么
+## 2. What a leaked key means
 
-拿到签名密钥（`.jks` 加上口令）的人，可以给任意 APK 签上与本应用相同的签名，包名同样用 `com.mcp.server.eve`。只要用户被诱导安装这样一个“更新”：
+Someone with the signing key (the `.jks` plus its password) can give any APK the same signature as this app, with the same package name `com.mcp.server.eve`. As soon as a user is tricked into installing such an "update":
 
-- 它会**直接覆盖**本应用，并继承本应用的全部数据；
-- 它运行在同一个 UID 下，因此能用 Android Keystore 解密本应用保存的访问令牌和中继设备密钥。拿到这两样，就能冒充你的手机连接中继，也能访问本服务器；
-- 它可以继承本应用已获得的权限，例如使用情况访问。
+- it **directly replaces** this app and inherits all of its data;
+- it runs under the same UID, so it can use the Android Keystore to decrypt the access token and relay device key this app stored. With those two, it can impersonate your phone to the relay and access this server;
+- it can inherit permissions this app was granted, such as usage access.
 
-本应用不在应用商店上架，只能侧载安装，所以攻击者必须让你主动安装他的 APK。但一旦安装，上面这些影响都会发生。
+This app is not in any app store and can only be sideloaded, so an attacker has to get you to install their APK yourself. But once installed, all of the above happens.
 
-## 3. 什么时候必须更换密钥
+## 3. When the key must be changed
 
-| 情况 | 处理 |
+| Situation | Action |
 |---|---|
-| `.jks` 和口令都已外泄。包括：`signing/` 目录或 `keystore.properties` 与 `.jks` 一起被上传到网盘、仓库、聊天记录、公开的发布包 | **必须更换**，立即按第 4 节操作 |
-| 开发电脑被入侵，或被他人长时间接触 | **必须更换** |
-| 只有 `.jks` 外泄，口令没有外泄 | 口令是 24 字节的随机值，暴力破解不现实。仍建议按第 4 节更换，至少应尽快更换 |
-| 只有口令外泄，`.jks` 没有外泄 | 用 `keytool -storepasswd` / `-keypasswd` 改口令即可，不需要更换密钥 |
-| 证书指纹（SHA-256）被公开 | 不需要处理。证书指纹本来就是公开信息 |
+| Both the `.jks` and the password leaked. Including: the `signing/` directory, or `keystore.properties` together with the `.jks`, uploaded to cloud storage, a repository, a chat log or a public release package | **Must change**; follow section 4 immediately |
+| The development computer was compromised, or someone else had access to it for a long time | **Must change** |
+| Only the `.jks` leaked, not the password | The password is a 24-byte random value, so brute-forcing it is not realistic. Changing per section 4 is still recommended, at least soon |
+| Only the password leaked, not the `.jks` | Changing the password with `keytool -storepasswd` / `-keypasswd` is enough; the key does not need to change |
+| The certificate fingerprint (SHA-256) was published | Nothing to do. The certificate fingerprint is public information anyway |
 
-## 4. 更换密钥且不破坏已安装用户的升级（APK Signature Scheme v3 密钥轮换）
+## 4. Changing the key without breaking upgrades for installed users (APK Signature Scheme v3 key rotation)
 
-原理：用旧密钥签署一份“轮换证明”（lineage），声明新密钥是它的继任者。
+Principle: the old key signs a "rotation proof" (lineage) declaring the new key as its successor.
 
-- **Android 9（API 28）及以上**：设备会接受用新密钥签名、并带有这份证明的更新，应用数据保留。装上新版本之后，**仅用旧密钥签名的 APK 不能再覆盖安装**（除非给旧密钥授予 rollback 能力；默认不授予）。
-- **Android 8.0 / 8.1（API 26–27）**：这些系统不认识 v3 签名，只校验 v1/v2 签名，而 v1/v2 仍是旧密钥。这意味着在这些设备上，**持有旧密钥的人仍能推送“合法”更新**，这一点无法靠轮换解决。见本节最后的说明。
+- **Android 9 (API 28) and above**: devices accept updates signed with the new key that carry this proof, and app data is kept. After the new version is installed, **an APK signed only with the old key can no longer be installed over it** (unless the old key is granted the rollback capability; by default it is not).
+- **Android 8.0 / 8.1 (API 26–27)**: these systems do not understand v3 signatures and only check v1/v2, which are still the old key. This means that on these devices **whoever holds the old key can still push "legitimate" updates**, and rotation cannot fix that. See the note at the end of this section.
 
-`apksigner` 位于 `D:\android-sdk-public-build\build-tools\35.0.0\`。
+`apksigner` is in `D:\android-sdk-public-build\build-tools\35.0.0\`.
 
-> 本节是通用步骤。2026-10-10 实际执行时，lineage 文件名为 `signing/lineage-v1-v2.bin`，口令写入 `signing/rotation.properties`，4.3 的签名与校验由 `tools/sign_release.py` 自动完成，见第 6 节。
+> This section is the general procedure. When it was actually carried out on 2026-10-10, the lineage file was named `signing/lineage-v1-v2.bin`, the password was written to `signing/rotation.properties`, and the signing and verification of 4.3 were done automatically by `tools/sign_release.py`; see section 6.
 
-### 4.1 生成新密钥，并把旧密钥移出项目目录
+### 4.1 Generate a new key, and move the old key out of the project directory
 
 ```bash
 cd D:/Claude/mcp-server
@@ -62,10 +64,10 @@ NEWPW=$(python -c "import secrets;print(secrets.token_urlsafe(24))")
 keytool -genkeypair -keystore signing/eve-release-2.jks -storetype PKCS12 -alias eve-release-2 \
   -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA -validity 10000 \
   -storepass "$NEWPW" -keypass "$NEWPW" -dname "CN=Eve Read-only MCP, O=Project Eve"
-echo "新口令（离线保存后清屏）：$NEWPW"
+echo "New password (store it offline, then clear the screen): $NEWPW"
 ```
 
-### 4.2 用旧密钥签署轮换证明
+### 4.2 Sign the rotation proof with the old key
 
 ```bash
 BT=D:/android-sdk-public-build/build-tools/35.0.0
@@ -74,66 +76,66 @@ $BT/apksigner.bat rotate --out signing/lineage-1-2.bin \
   --new-signer --ks signing/eve-release-2.jks --ks-key-alias eve-release-2
 ```
 
-`apksigner` 会交互式询问两个口令。
+`apksigner` asks for both passwords interactively.
 
-### 4.3 构建未签名的 release 包，再按轮换方式签名
+### 4.3 Build an unsigned release package, then sign it with rotation
 
-1. 先把 `signing/keystore.properties` 临时改名，让 Gradle 不签名。
-2. 然后构建：
+1. First rename `signing/keystore.properties` temporarily, so Gradle does not sign.
+2. Then build:
 
 ```bash
 JAVA_HOME=D:/JDK GRADLE_USER_HOME=D:/Claude/.gradle-ascii ./gradlew.bat :app:assembleRelease
-APK=app/build/outputs/apk/release/eve-readonly-mcp-<新版本>-release.apk
+APK=app/build/outputs/apk/release/eve-readonly-mcp-<new version>-release.apk
 $BT/apksigner.bat sign \
   --ks signing/eve-release.jks --ks-key-alias eve-release \
   --next-signer --ks signing/eve-release-2.jks --ks-key-alias eve-release-2 \
   --lineage signing/lineage-1-2.bin --rotation-min-sdk-version 28 \
   "$APK"
-$BT/apksigner.bat verify -v --print-certs "$APK"   # 应看到 v3 签名者为新证书，并带有 lineage
+$BT/apksigner.bat verify -v --print-certs "$APK"   # should show the new certificate as the v3 signer, with a lineage
 ```
 
-注意：
+Notes:
 
-- `--rotation-min-sdk-version 28` 让 Android 9 及以上的设备都使用新密钥。省略这个参数时，新版 apksigner 默认只对 Android 13 及以上生效。
-- 后续每个版本都要用同样的 `--lineage` 签名。
+- `--rotation-min-sdk-version 28` makes every device on Android 9 and above use the new key. Without it, newer apksigner versions apply it only to Android 13 and above by default.
+- Every later version must be signed with the same `--lineage`.
 
-### 4.4 发布与收尾
+### 4.4 Release and wrap-up
 
-1. 尽快发布这个版本，让所有手机都装上。轮换只对已经装上新版本的设备生效。
-2. 在每台手机上，到“安全”页**更换令牌**；在 VPS 上**更换 device.secret**（命令见 DEPLOY_RELAY.md §9）；再更新 Project Eve 配置。如果有人曾在你的手机上安装过伪造的更新，原有凭据应视为已经泄露。
-3. 旧密钥不能删除：生成 lineage 时需要它，以后如果要再次轮换也需要它。把它离线加密备份后，从开发电脑上移走。
-4. 更新 `signing/keystore.properties`，或者改为手动签名流程，并在 README 中写明当前证书的 SHA-256。
+1. Release this version as soon as possible and get it onto every phone. Rotation only takes effect on devices that have the new version installed.
+2. On each phone, **change the token** on the "Security" page; on the VPS **change device.secret** (commands in DEPLOY_RELAY.md §9); then update the Project Eve configuration. If anyone ever installed a forged update on your phone, the old credentials should be considered leaked.
+3. The old key must not be deleted: it is needed to generate the lineage and for any future rotation. Make an encrypted offline backup of it, then remove it from the development computer.
+4. Update `signing/keystore.properties`, or switch to a manual signing flow, and state the current certificate's SHA-256 in the README.
 
-### 4.5 Android 8.0 / 8.1 设备
+### 4.5 Android 8.0 / 8.1 devices
 
-v3 轮换无法保护这些设备。如果密钥确实已经泄露，可以选择：
+v3 rotation cannot protect these devices. If the key really has leaked, the options are:
 
-- **推荐**：把 `minSdk` 提高到 28，并请这些设备上的用户卸载后重新安装。卸载会清除本机配置，需要重新填写中继信息，令牌也会变化。
-- 或者改用新的 `applicationId`，作为一个全新的应用发布，旧应用卸载。
+- **Recommended**: raise `minSdk` to 28 and ask users on these devices to uninstall and reinstall. Uninstalling clears the local configuration, so the relay details have to be entered again, and the token changes too.
+- Or switch to a new `applicationId`, release it as a brand-new app, and uninstall the old one.
 
-## 5. 没有泄露时的日常防护
+## 5. Everyday protection when nothing has leaked
 
-- `signing/` 只放在开发电脑上，并离线加密备份一份（例如加密 U 盘）。**丢失密钥后就不能再发布能覆盖安装的更新**，只能改用新的包名。
-- 不要把 `signing/` 目录、`.jks` 文件或口令发到聊天记录、网盘或 issue 里。
-- 发布只用 `tools/package_release.py`。手动打的包，发布前要用 `tests/check_release_artifacts.py` 检查。
-- 定期在 Windows PowerShell 中运行 `Get-ChildItem -Recurse -Include *.jks,*.keystore,keystore.properties D:\` 之类的命令，确认密钥只存在于预期的位置。
+- Keep `signing/` only on the development computer, with one encrypted offline backup (e.g. an encrypted USB drive). **If the key is lost, updates that install over the app can no longer be released**; only a new package name is possible.
+- Never post the `signing/` directory, the `.jks` file or the password in chats, cloud storage or issues.
+- Release only with `tools/package_release.py`. Check packages built by hand with `tests/check_release_artifacts.py` before releasing.
+- Regularly run something like `Get-ChildItem -Recurse -Include *.jks,*.keystore,keystore.properties D:\` in Windows PowerShell to confirm the keys exist only where expected.
 
-## 6. 事件记录：2026-10-10 完整工作目录 ZIP 泄露签名密钥
+## 6. Incident record: 2026-10-10, a ZIP of the whole working directory leaked the signing key
 
-| 项目 | 内容 |
+| Item | Details |
 |---|---|
-| 发现 | 整个工作目录被直接压缩成 `mcp-server.zip`（约 176 MB，3768 个条目）并提供给了外部。用 `tests/check_release_artifacts.py --handoff` 扫描后，确认其中包含 `signing/eve-release.jks` 和 `signing/keystore.properties`（明文口令），与本机文件逐字节相同。另外还包含 `.git/`（293 个文件）、`.gradle/`、`.kotlin/`、`app/build/` 等构建目录、`dist/` 和 `local.properties`。 |
-| 范围 | 扫描 4437 个文件（含嵌套归档），除上述密钥和口令外，**没有**发现其他凭据：没有 MCP 访问令牌、中继设备密钥或云服务 API 密钥。手机上的令牌和 VPS 上的 device.secret 从未存放在工作目录中。git 历史中也没有密钥文件。 |
-| 判断 | 私钥和口令一起外泄，符合第 3 节“必须更换”的条件；用户也确认该 ZIP 已离开本机。 |
-| 处理 | 已执行第 4 节的 v3 密钥轮换：<br>• 新密钥 `signing/eve-release-2.jks`（别名 `eve-release-2`）<br>• 轮换证明 `signing/lineage-v1-v2.bin`<br>• 旧密钥的口令文件改名为 `keystore.properties.v1-retired`，不再用于构建<br>• 新的签名配置 `signing/rotation.properties`<br>• Gradle 发现轮换配置时只产出未签名包，并且禁止与单一密钥配置并存<br>• 1.2.2-eve 起由 `tools/sign_release.py` 签名并自动校验 |
-| 证书 | 旧证书 SHA-256 `52f602d3cf17deff7a9ebfdab12d18007b94211982fbf1c4b94ddf861160b499`（Android 8.x 仍使用）<br>新证书 SHA-256 `d5a5eeec329d58c4f4aa5ef70694eda249c642ffa9a5723d9a30f5f706af15ea`（Android 9+ 使用） |
-| 预防 | 交接一律使用 `tools/make_handoff.py`（见 [HANDOFF.md](HANDOFF.md)），发布一律使用 `tools/package_release.py`，两者都会扫描最终生成的 ZIP。 |
+| Discovery | The whole working directory was zipped directly into `mcp-server.zip` (about 176 MB, 3768 entries) and given to an outside party. Scanning it with `tests/check_release_artifacts.py --handoff` confirmed it contained `signing/eve-release.jks` and `signing/keystore.properties` (plain-text password), byte for byte identical to the local files. It also contained `.git/` (293 files), build directories such as `.gradle/`, `.kotlin/` and `app/build/`, `dist/` and `local.properties`. |
+| Scope | 4437 files scanned (including nested archives); apart from the key and password above, **no** other credentials were found: no MCP access token, relay device key or cloud API key. The token on the phone and the device.secret on the VPS were never stored in the working directory. The git history contains no key files either. |
+| Assessment | The private key and password leaked together, which meets the "must change" condition of section 3; the user also confirmed that the ZIP had left the machine. |
+| Action | The v3 key rotation of section 4 was carried out:<br>• new key `signing/eve-release-2.jks` (alias `eve-release-2`)<br>• rotation proof `signing/lineage-v1-v2.bin`<br>• the old key's password file renamed to `keystore.properties.v1-retired`, no longer used for builds<br>• new signing configuration `signing/rotation.properties`<br>• when Gradle finds the rotation configuration it produces only an unsigned package, and it may not coexist with a single-key configuration<br>• since 1.2.2-eve signing and automatic verification are done by `tools/sign_release.py` |
+| Certificates | Old certificate SHA-256 `52f602d3cf17deff7a9ebfdab12d18007b94211982fbf1c4b94ddf861160b499` (still used by Android 8.x)<br>New certificate SHA-256 `d5a5eeec329d58c4f4aa5ef70694eda249c642ffa9a5723d9a30f5f706af15ea` (used by Android 9+) |
+| Prevention | Handoffs always use `tools/make_handoff.py` (see [HANDOFF.md](HANDOFF.md)) and releases always use `tools/package_release.py`; both scan the final ZIP. |
 
-### 仍需用户完成
+### Still to be done by the user
 
-1. 删除本机和所有收件方保存的 `mcp-server.zip`。外泄的副本无法撤回，所以轮换仍然必要。
-2. **尽快**在每台手机上覆盖安装 1.2.2。轮换只对已装上 1.2.2 的 Android 9+ 手机生效：在装上之前，持有旧密钥的人仍然可以签出能覆盖安装的 APK。
-3. 不要安装任何来源不明的“Eve 只读 MCP”APK。官方 APK 只来自 `dist/`，可以用 `apksigner verify --print-certs` 核对：在 Android 9+ 上应显示新证书。
-4. 把 `signing/` 整个目录离线加密备份：两把密钥、lineage、`rotation.properties`。**丢失新密钥后，就不能再发布能覆盖安装的更新**（lineage 文件丢失不要紧：签名时把 `--lineage` 指向任意一个已发布的 1.2.2 及以后版本的 APK 即可，已实测可行）。每次发布仍需要两把密钥：旧密钥用于给 Android 8.x 做 v2 签名，新密钥用于 v3。平时可以只在发布时把 `signing/` 放回开发电脑，发布完再移走。如果把 `minSdk` 提高到 28，以后就不再需要旧密钥。
-5. Android 8.x 设备无法受到轮换保护，建议卸载 Eve 只读 MCP，或停止使用。
-6. 访问令牌和中继设备密钥**没有**随 ZIP 外泄，无需因为这次事件更换。如果曾经在手机上安装过来源不明的同名 APK，则需要更换。
+1. Delete `mcp-server.zip` locally and at every recipient. The leaked copies cannot be recalled, so the rotation is still necessary.
+2. Install 1.2.2 over the old version on every phone **as soon as possible**. Rotation only takes effect on Android 9+ phones with 1.2.2 installed: until then, whoever holds the old key can still sign an APK that installs over it.
+3. Do not install any "Eve read-only MCP" APK of unknown origin. Official APKs come only from `dist/` and can be checked with `apksigner verify --print-certs`: on Android 9+ it should show the new certificate.
+4. Make an encrypted offline backup of the whole `signing/` directory: both keys, the lineage, `rotation.properties`. **If the new key is lost, updates that install over the app can no longer be released** (losing the lineage file is fine: when signing, point `--lineage` at any released APK of 1.2.2 or later; tested and it works). Every release still needs both keys: the old key for the v2 signature for Android 8.x, the new key for v3. Normally `signing/` can be put back on the development computer only for releases and removed afterwards. If `minSdk` is raised to 28, the old key will no longer be needed.
+5. Android 8.x devices cannot be protected by the rotation; uninstalling the Eve read-only MCP there, or no longer using it, is recommended.
+6. The access token and relay device key did **not** leak with the ZIP, so they do not need to be changed because of this incident. They do need changing if a same-named APK of unknown origin was ever installed on the phone.
