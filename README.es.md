@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP es un servidor [MCP](https://modelcontextprotocol.io/) de solo lectura para Android, pensado para **[Violet](https://github.com/aileboeth-web/violet-companion)**, una compañera de IA autoalojada. Una vez instalado en tu móvil, Violet puede conocer el estado del teléfono dentro de los límites que permitas, por ejemplo:
+Violet MCP es un servidor [MCP](https://modelcontextprotocol.io/) de solo lectura para Android, pensado para **[Violet](https://github.com/aileboeth/violet-companion)**, una compañera de IA autoalojada. Una vez instalado en tu móvil, Violet puede conocer el estado del teléfono dentro de los límites que permitas, por ejemplo:
 
 - la batería, si la pantalla está encendida, la app que estás usando y cuánto la has usado hoy;
 - la próxima alarma, la canción que suena, si llevas auriculares;
@@ -25,7 +25,7 @@ Basado en [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), con estos
 - **Se añade**: herramientas de solo lectura que perciben el estado del teléfono.
 - **Se sustituye**: el túnel original en texto plano pasa a ser un relé TLS en tu propio VPS al que se conecta el teléfono.
 
-Versión actual: app **Violet MCP 1.4.2** (paquete `com.mcp.server.violet`), relé **violet-mcp-relay 1.2.0**.
+Versión actual: app **Violet MCP 1.4.3** (paquete `com.mcp.server.violet`), relé **violet-mcp-relay 1.2.0**.
 
 Por ahora, la interfaz de la app está en chino.
 
@@ -69,7 +69,7 @@ Por ahora, la interfaz de la app está en chino.
 
 **2. Instala y configura la app en el móvil**
 
-1. Instala el último `violet-mcp-<versión>-release.apk` de [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) (la app se llama "Violet MCP"). Las versiones siguientes se pueden actualizar desde la propia app.
+1. Instala el último `violet-mcp-<versión>-release.apk` de [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) (la app se llama "Violet MCP"). Las versiones siguientes se pueden actualizar desde la propia app.
 2. Abre la app → Ajustes → Permisos: permite el "acceso a datos de uso", y también se recomienda activar "batería sin restricciones". Después elige en la página Herramientas y permisos las herramientas que compartirás con Violet.
 3. En Acceso remoto, introduce la dirección del relé, la clave de dispositivo y la huella del certificado del paso 1 y activa la conexión.
 4. Vuelve a la pantalla principal y pulsa **Iniciar**.

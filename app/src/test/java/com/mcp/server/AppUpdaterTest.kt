@@ -30,7 +30,7 @@ class AppUpdaterTest {
         var fail: String? = null
         override fun latest(): UpdateChecker.Release {
             fail?.let { throw UpdateChecker.UpdateException(it) }
-            return UpdateChecker.Release("v$version", version, "https://github.com/aileboeth-web/violet-mcp/releases/tag/v$version",
+            return UpdateChecker.Release("v$version", version, "https://github.com/aileboeth/violet-mcp/releases/tag/v$version",
                 null, "", "violet-mcp-$version-release.apk", "https://github.com/x.apk", bytes.size.toLong(),
                 "https://github.com/SHA256SUMS.txt")
         }

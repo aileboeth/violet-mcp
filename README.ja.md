@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP は、セルフホスト型の AI コンパニオン **[Violet](https://github.com/aileboeth-web/violet-companion)** のための、Android 用の読み取り専用 [MCP](https://modelcontextprotocol.io/) サーバーです。スマホに入れると、あなたが許可した範囲で、Violet がスマホの状態を知ることができます。たとえば：
+Violet MCP は、セルフホスト型の AI コンパニオン **[Violet](https://github.com/aileboeth/violet-companion)** のための、Android 用の読み取り専用 [MCP](https://modelcontextprotocol.io/) サーバーです。スマホに入れると、あなたが許可した範囲で、Violet がスマホの状態を知ることができます。たとえば：
 
 - バッテリー、画面がついているか、使っているアプリ、今日どれくらい使ったか
 - 次のアラーム、再生中の曲、ヘッドホンをつけているか
@@ -25,7 +25,7 @@ Violet MCP は、セルフホスト型の AI コンパニオン **[Violet](https
 - **追加したもの**：スマホの状態を感知する読み取り専用ツール。
 - **置き換えたもの**：元の平文トンネルを、スマホから自分の VPS に接続する TLS リレーに置き換えました。
 
-現在のバージョン：アプリ **Violet MCP 1.4.2**（パッケージ名 `com.mcp.server.violet`）、リレー **violet-mcp-relay 1.2.0**。
+現在のバージョン：アプリ **Violet MCP 1.4.3**（パッケージ名 `com.mcp.server.violet`）、リレー **violet-mcp-relay 1.2.0**。
 
 アプリの画面は現在中国語です。
 
@@ -69,7 +69,7 @@ Violet MCP は、セルフホスト型の AI コンパニオン **[Violet](https
 
 **2. スマホにインストールして設定**
 
-1. [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) から最新の `violet-mcp-<バージョン>-release.apk` をインストールします（アプリ名は「Violet MCP」）。以降のバージョンはアプリ内で直接更新できます。
+1. [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) から最新の `violet-mcp-<バージョン>-release.apk` をインストールします（アプリ名は「Violet MCP」）。以降のバージョンはアプリ内で直接更新できます。
 2. アプリを開き → 設定 → 権限：「使用状況へのアクセス」を許可し、「バッテリー無制限」もおすすめです。その後「ツールと権限」ページで Violet に公開するツールを選びます。
 3. 「リモートアクセス」で手順 1 のリレーアドレス、デバイスキー、証明書フィンガープリントを入力し、接続をオンにします。
 4. ホーム画面に戻って **開始** をタップします。

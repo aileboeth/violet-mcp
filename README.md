@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP is a read-only Android [MCP](https://modelcontextprotocol.io/) server for **[Violet](https://github.com/aileboeth-web/violet-companion)**, a self-hosted AI companion. Once it is on your phone, Violet can know the phone's state within the limits you allow, for example:
+Violet MCP is a read-only Android [MCP](https://modelcontextprotocol.io/) server for **[Violet](https://github.com/aileboeth/violet-companion)**, a self-hosted AI companion. Once it is on your phone, Violet can know the phone's state within the limits you allow, for example:
 
 - battery, whether the screen is on, the app you are using and how long you have used it today;
 - the next alarm, the song that is playing, whether headphones are connected;
@@ -25,7 +25,7 @@ Based on [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), with these
 - **Added**: read-only tools that sense the phone's state.
 - **Replaced**: the original plain-text tunnel became a TLS relay that the phone connects out to, on your own VPS.
 
-Current version: app **Violet MCP 1.4.2** (package `com.mcp.server.violet`), relay **violet-mcp-relay 1.2.0**.
+Current version: app **Violet MCP 1.4.3** (package `com.mcp.server.violet`), relay **violet-mcp-relay 1.2.0**.
 
 The app's interface is currently in Chinese.
 
@@ -69,7 +69,7 @@ The app's interface is currently in Chinese.
 
 **2. Install and set up the app on your phone**
 
-1. Install the latest `violet-mcp-<version>-release.apk` from [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) (the app is called "Violet MCP"). Later versions can be updated from inside the app.
+1. Install the latest `violet-mcp-<version>-release.apk` from [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) (the app is called "Violet MCP"). Later versions can be updated from inside the app.
 2. Open the app → **Settings → Permissions**: allow "usage access", and turning on "unrestricted battery" is recommended too. Then choose the tools to share with Violet on the **Tools & permissions** page.
 3. Under **Remote access**, enter the relay address, device key and certificate fingerprint from step 1 and turn the connection on.
 4. Go back to the home screen and tap **Start**.

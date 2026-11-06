@@ -38,7 +38,7 @@ class UpdateChecker(
     private val requireHttps: Boolean = true,
 ) : ReleaseSource {
     companion object {
-        const val DEFAULT_REPO = "aileboeth-web/violet-mcp"
+        const val DEFAULT_REPO = "aileboeth/violet-mcp"
         val GITHUB_HOSTS = setOf("api.github.com", "github.com", "objects.githubusercontent.com",
             "release-assets.githubusercontent.com")
         const val MAX_APK_BYTES = 64L * 1024 * 1024

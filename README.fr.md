@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP est un serveur [MCP](https://modelcontextprotocol.io/) Android en lecture seule, conçu pour **[Violet](https://github.com/aileboeth-web/violet-companion)**, une compagne IA auto-hébergée. Une fois installé sur votre téléphone, Violet peut connaître l'état du téléphone dans les limites que vous autorisez, par exemple :
+Violet MCP est un serveur [MCP](https://modelcontextprotocol.io/) Android en lecture seule, conçu pour **[Violet](https://github.com/aileboeth/violet-companion)**, une compagne IA auto-hébergée. Une fois installé sur votre téléphone, Violet peut connaître l'état du téléphone dans les limites que vous autorisez, par exemple :
 
 - la batterie, si l'écran est allumé, l'app utilisée et combien de temps vous l'avez utilisée aujourd'hui ;
 - la prochaine alarme, le morceau en cours, si un casque est branché ;
@@ -25,7 +25,7 @@ Basé sur [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), avec ces 
 - **Ajouté** : des outils en lecture seule qui perçoivent l'état du téléphone.
 - **Remplacé** : le tunnel d'origine en clair devient un relais TLS sur votre propre VPS, auquel le téléphone se connecte.
 
-Version actuelle : app **Violet MCP 1.4.2** (paquet `com.mcp.server.violet`), relais **violet-mcp-relay 1.2.0**.
+Version actuelle : app **Violet MCP 1.4.3** (paquet `com.mcp.server.violet`), relais **violet-mcp-relay 1.2.0**.
 
 L'interface de l'app est pour l'instant en chinois.
 
@@ -69,7 +69,7 @@ L'interface de l'app est pour l'instant en chinois.
 
 **2. Installer et configurer l'app sur le téléphone**
 
-1. Installez le dernier `violet-mcp-<version>-release.apk` depuis les [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) (l'app s'appelle « Violet MCP »). Les versions suivantes peuvent être mises à jour depuis l'app.
+1. Installez le dernier `violet-mcp-<version>-release.apk` depuis les [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) (l'app s'appelle « Violet MCP »). Les versions suivantes peuvent être mises à jour depuis l'app.
 2. Ouvrez l'app → Paramètres → Autorisations : autorisez l'« accès aux données d'utilisation » ; activer « batterie sans restriction » est également recommandé. Choisissez ensuite sur la page Outils et autorisations les outils à partager avec Violet.
 3. Sous Accès à distance, saisissez l'adresse du relais, la clé d'appareil et l'empreinte du certificat de l'étape 1, puis activez la connexion.
 4. Revenez à l'écran d'accueil et touchez **Démarrer**.

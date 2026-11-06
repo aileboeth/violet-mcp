@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP 是給 **[Violet](https://github.com/aileboeth-web/violet-companion)**（自架的 AI 陪伴）用的 Android 唯讀 [MCP](https://modelcontextprotocol.io/) 伺服器。裝在手機上以後，Violet 可以在你允許的範圍內知道手機的狀態，例如：
+Violet MCP 是給 **[Violet](https://github.com/aileboeth/violet-companion)**（自架的 AI 陪伴）用的 Android 唯讀 [MCP](https://modelcontextprotocol.io/) 伺服器。裝在手機上以後，Violet 可以在你允許的範圍內知道手機的狀態，例如：
 
 - 電量、螢幕亮著沒、正在用哪個 App、今天用了多久；
 - 下一個鬧鐘、正在播的歌、有沒有戴耳機；
@@ -25,7 +25,7 @@ Violet MCP 是給 **[Violet](https://github.com/aileboeth-web/violet-companion)*
 - **新增**：感知手機狀態的唯讀工具。
 - **替換**：原本的明文通道改成「手機主動連到你自己 VPS 的 TLS 中繼」。
 
-目前版本：App **Violet MCP 1.4.2**（套件名稱 `com.mcp.server.violet`），中繼 **violet-mcp-relay 1.2.0**。
+目前版本：App **Violet MCP 1.4.3**（套件名稱 `com.mcp.server.violet`），中繼 **violet-mcp-relay 1.2.0**。
 
 App 介面目前是簡體中文。
 
@@ -69,7 +69,7 @@ App 介面目前是簡體中文。
 
 **2. 在手機上安裝和設定**
 
-1. 安裝 [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) 裡最新的 `violet-mcp-<版本>-release.apk`（App 名稱「Violet MCP」）。之後的版本可以在 App 裡直接更新。
+1. 安裝 [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) 裡最新的 `violet-mcp-<版本>-release.apk`（App 名稱「Violet MCP」）。之後的版本可以在 App 裡直接更新。
 2. 開啟 App → 設定 → 權限：允許「使用情形存取權」，也建議開啟「電池不受限制」。然後在「工具與權限」頁選好要開放給 Violet 的工具。
 3. 在「遠端存取」裡填入第 1 步得到的中繼位址、裝置金鑰、憑證指紋，開啟連線。
 4. 回到主頁點 **啟動**。

@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP는 직접 운영하는 AI 동반자 **[Violet](https://github.com/aileboeth-web/violet-companion)**을 위한 Android용 읽기 전용 [MCP](https://modelcontextprotocol.io/) 서버입니다. 휴대폰에 설치하면 당신이 허락한 범위 안에서 Violet이 휴대폰 상태를 알 수 있습니다. 예를 들어:
+Violet MCP는 직접 운영하는 AI 동반자 **[Violet](https://github.com/aileboeth/violet-companion)**을 위한 Android용 읽기 전용 [MCP](https://modelcontextprotocol.io/) 서버입니다. 휴대폰에 설치하면 당신이 허락한 범위 안에서 Violet이 휴대폰 상태를 알 수 있습니다. 예를 들어:
 
 - 배터리, 화면이 켜져 있는지, 쓰고 있는 앱, 오늘 얼마나 썼는지
 - 다음 알람, 재생 중인 노래, 헤드폰을 꼈는지
@@ -25,7 +25,7 @@ Violet MCP는 직접 운영하는 AI 동반자 **[Violet](https://github.com/ail
 - **추가**: 휴대폰 상태를 감지하는 읽기 전용 도구.
 - **교체**: 원래의 평문 터널을 "휴대폰이 직접 당신의 VPS로 연결하는 TLS 릴레이"로 바꿨습니다.
 
-현재 버전: 앱 **Violet MCP 1.4.2**(패키지 이름 `com.mcp.server.violet`), 릴레이 **violet-mcp-relay 1.2.0**.
+현재 버전: 앱 **Violet MCP 1.4.3**(패키지 이름 `com.mcp.server.violet`), 릴레이 **violet-mcp-relay 1.2.0**.
 
 앱 화면은 현재 중국어입니다.
 
@@ -69,7 +69,7 @@ Violet MCP는 직접 운영하는 AI 동반자 **[Violet](https://github.com/ail
 
 **2. 휴대폰에 설치하고 설정**
 
-1. [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest)에서 최신 `violet-mcp-<버전>-release.apk`를 설치합니다(앱 이름 "Violet MCP"). 이후 버전은 앱 안에서 바로 업데이트할 수 있습니다.
+1. [Releases](https://github.com/aileboeth/violet-mcp/releases/latest)에서 최신 `violet-mcp-<버전>-release.apk`를 설치합니다(앱 이름 "Violet MCP"). 이후 버전은 앱 안에서 바로 업데이트할 수 있습니다.
 2. 앱을 열고 → 설정 → 권한: "사용 정보 접근"을 허용하고, "배터리 제한 없음"도 켜는 것을 권합니다. 그런 다음 "도구와 권한" 페이지에서 Violet에게 공개할 도구를 고릅니다.
 3. "원격 접속"에 1단계에서 얻은 릴레이 주소, 기기 키, 인증서 지문을 입력하고 연결을 켭니다.
 4. 홈 화면으로 돌아가 **시작**을 누릅니다.

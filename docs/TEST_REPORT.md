@@ -2,6 +2,20 @@
 
 **English** | [简体中文](TEST_REPORT.zh-CN.md)
 
+## Violet MCP 1.4.3 (relay 1.2.0 unchanged) — 2026-11-05
+
+The GitHub account was renamed from aileboeth-web to aileboeth: in-app updates now read `aileboeth/violet-mcp` (`UpdateChecker.DEFAULT_REPO`), and the settings text names the new repository. The old name only redirects until someone else registers it. Nothing else changed.
+
+| Test | Result |
+|---|---|
+| mcp-core + Robolectric (`:mcp-core:test :app:testDebugUnitTest --offline`, **simulated**) | Pass, 131/131 (73 + 58) |
+| `:app:assembleDebug` / `:app:assembleRelease` (R8) | Pass; artifacts `violet-mcp-1.4.3-{debug,release}.apk`, versionCode 10 |
+| Static APK check (`tests/verify_apk.py`, debug package) | Pass, 0 failures |
+| Old repository URL (`api.github.com/repos/aileboeth-web/violet-mcp/releases/latest`) | 301 to `api.github.com/repositories/…`, which stays within the updater's allowed hosts, so 1.4.2 installs still find 1.4.3 |
+| Signing (`tools/sign_release.py`, with the user's consent) | Pass: Android 9+ signer `d5a5eeec…` (same as 1.4.2), the old certificate for Android 8.x, lineage old → new |
+| Release package (`tools/package_release.py --version 1.4.3 --relay-version 1.2.0`) | Pass: `dist/v1.4.3/`, 0 problems in the release artifact and handoff package scans |
+| Real device (updating 1.4.2 → 1.4.3 in the app) | Cannot be verified (no device) |
+
 ## Violet MCP 1.4.2 (relay 1.2.0 unchanged) — 2026-11-03
 
 Up to 3 relay servers connected at once (the user chose a limit of 3 and a "server card list" on the settings page): one `RelayClient` per enabled slot, all sharing the same

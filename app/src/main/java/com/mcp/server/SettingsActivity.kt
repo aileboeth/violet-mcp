@@ -311,7 +311,7 @@ private fun UpdateCard(canInstall: Boolean) {
                 }
             }
             Text(
-                "只从 GitHub（aileboeth-web/violet-mcp）下载；安装前核对 SHA-256、包名、版本号和签名证书，任何一项不符都不安装。",
+                "只从 GitHub（aileboeth/violet-mcp）下载；安装前核对 SHA-256、包名、版本号和签名证书，任何一项不符都不安装。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

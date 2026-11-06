@@ -10,7 +10,7 @@
 
 </div>
 
-Violet MCP ist ein nur lesender [MCP](https://modelcontextprotocol.io/)-Server für Android, gedacht für **[Violet](https://github.com/aileboeth-web/violet-companion)**, eine selbst gehostete KI-Begleiterin. Sobald er auf deinem Handy ist, kann Violet innerhalb der Grenzen, die du erlaubst, den Zustand des Handys kennen, zum Beispiel:
+Violet MCP ist ein nur lesender [MCP](https://modelcontextprotocol.io/)-Server für Android, gedacht für **[Violet](https://github.com/aileboeth/violet-companion)**, eine selbst gehostete KI-Begleiterin. Sobald er auf deinem Handy ist, kann Violet innerhalb der Grenzen, die du erlaubst, den Zustand des Handys kennen, zum Beispiel:
 
 - Akku, ob der Bildschirm an ist, welche App du nutzt und wie lange heute schon;
 - den nächsten Wecker, den gerade laufenden Song, ob Kopfhörer verbunden sind;
@@ -25,7 +25,7 @@ Basiert auf [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), mit die
 - **Hinzugefügt**: nur lesende Werkzeuge, die den Zustand des Handys erfassen.
 - **Ersetzt**: Der ursprüngliche Klartext-Tunnel wurde durch ein TLS-Relay auf deinem eigenen VPS ersetzt, zu dem sich das Handy verbindet.
 
-Aktuelle Version: App **Violet MCP 1.4.2** (Paket `com.mcp.server.violet`), Relay **violet-mcp-relay 1.2.0**.
+Aktuelle Version: App **Violet MCP 1.4.3** (Paket `com.mcp.server.violet`), Relay **violet-mcp-relay 1.2.0**.
 
 Die Oberfläche der App ist derzeit auf Chinesisch.
 
@@ -69,7 +69,7 @@ Die Oberfläche der App ist derzeit auf Chinesisch.
 
 **2. Die App auf dem Handy installieren und einrichten**
 
-1. Installiere die neueste `violet-mcp-<version>-release.apk` aus den [Releases](https://github.com/aileboeth-web/violet-mcp/releases/latest) (die App heißt „Violet MCP"). Spätere Versionen lassen sich direkt in der App aktualisieren.
+1. Installiere die neueste `violet-mcp-<version>-release.apk` aus den [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) (die App heißt „Violet MCP"). Spätere Versionen lassen sich direkt in der App aktualisieren.
 2. Öffne die App → Einstellungen → Berechtigungen: erlaube den „Zugriff auf Nutzungsdaten"; „Akku ohne Einschränkung" einzuschalten wird ebenfalls empfohlen. Wähle dann auf der Seite Werkzeuge & Berechtigungen die Werkzeuge, die du mit Violet teilen willst.
 3. Trage unter Fernzugriff Relay-Adresse, Geräteschlüssel und Zertifikat-Fingerabdruck aus Schritt 1 ein und schalte die Verbindung ein.
 4. Geh zurück zum Startbildschirm und tippe auf **Starten**.

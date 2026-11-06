@@ -2,6 +2,20 @@
 
 [English](TEST_REPORT.md) | **简体中文**
 
+## Violet MCP 1.4.3（中继 1.2.0 不变）— 2026-11-05
+
+GitHub 账号从 aileboeth-web 改名为 aileboeth：应用内更新改为读取 `aileboeth/violet-mcp`（`UpdateChecker.DEFAULT_REPO`），设置页的说明文字也改成新仓库名。旧名字只在没人注册它之前会跳转。其他没有变化。
+
+| 测试 | 结果 |
+|---|---|
+| mcp-core + Robolectric（`:mcp-core:test :app:testDebugUnitTest --offline`，**模拟**） | 通过，131/131（73 + 58） |
+| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.3-{debug,release}.apk`，versionCode 10 |
+| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项 |
+| 旧仓库地址（`api.github.com/repos/aileboeth-web/violet-mcp/releases/latest`） | 301 跳到 `api.github.com/repositories/…`，仍在更新程序允许的主机内，所以 1.4.2 也能找到 1.4.3 |
+| 签名（`tools/sign_release.py`，用户同意） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.4.2 相同），Android 8.x 为旧证书，lineage 旧 → 新 |
+| 发布包（`tools/package_release.py --version 1.4.3 --relay-version 1.2.0`） | 通过：`dist/v1.4.3/`，发布产物和交接包扫描问题 0 个 |
+| 真机（在应用里从 1.4.2 更新到 1.4.3） | 无法验证（没有设备） |
+
 ## Violet MCP 1.4.2（中继 1.2.0 不变）— 2026-11-03
 
 同时连最多 3 个中继服务器（用户选上限 3、设置页“服务器卡片列表”）：每个开着的位置一个 `RelayClient`，共用同一个
