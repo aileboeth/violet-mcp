@@ -67,7 +67,7 @@ Violet MCP 是给 **[Violet](https://github.com/aileboeth/violet-companion)**（
 
 **2. 在手机上安装和设置**
 
-1. 安装 [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) 里最新的 `violet-mcp-<版本>-release.apk`（应用名“Violet MCP”）。以后的版本可以在应用里直接更新。
+1. 安装 [Releases](https://github.com/aileboeth/violet-mcp/releases/latest) 里最新的 `violet-mcp-<版本>-release.apk`（应用名“Violet MCP”）。以后的版本可以在应用里直接更新。打不开 GitHub 时用 [GitHub 加速地址](#国内网络github-加速地址) 下载。
 2. 打开应用 → 设置 → 权限：允许“使用情况访问权限”，“电池无限制”也建议打开。然后在“工具与权限”页选好要开放给 Violet 的工具。
 3. 在“远程访问”里填上第 1 步得到的中继地址、设备密钥、证书指纹，打开连接。
 4. 回到主页点 **启动**。
@@ -75,6 +75,33 @@ Violet MCP 是给 **[Violet](https://github.com/aileboeth/violet-companion)**（
 **3. 连上 Violet**
 
 在手机的“安全”页复制访问令牌，粘贴回 Violet 后台“工具与手机”页，就连上了。手动部署中继的，按 [docs/VIOLET_INTEGRATION.md](docs/VIOLET_INTEGRATION.zh-CN.md) 添加 MCP 服务器。
+
+### 国内网络：GitHub 加速地址
+
+手机或服务器连不上 GitHub 时，在 GitHub 地址前面加上加速站的地址再下载：
+
+| 加速站 | 说明 |
+|---|---|
+| `https://p.jackyu.cn/` | 推荐，HTTPS |
+| `http://8.217.135.233:9999/` | 备用，下载更快，但是明文 HTTP |
+
+2026-11-08 在国内网络（中国移动）实测，两个都能用，下载的 APK 和中继程序与 GitHub 上的完全一致（SHA-256 相同）。加速站是别人提供的免费服务，不归本项目管，随时可能失效；能直接连上 GitHub 时请用官方地址。
+
+- **下载或手动更新 App**（在手机浏览器里打开，下载后直接覆盖安装，令牌、中继配置和工具开关都会保留）：
+  - https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/violet-mcp-1.4.3-release.apk
+  - 备用：http://8.217.135.233:9999/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/violet-mcp-1.4.3-release.apk
+  - 以后有新版本时，把地址里的两处 `1.4.3` 换成新的版本号（最新版本号见本页开头的“当前版本”）
+- **应用内更新**还是直接连 GitHub（检查新版本用的是 GitHub API，加速站不支持）。手机连不上时它会显示检查失败，这时按上面的方法下载新版 APK 覆盖安装。
+- **中继程序**（手动部署时用，见 [docs/DEPLOY_RELAY.md](docs/DEPLOY_RELAY.zh-CN.md)）：在服务器上执行，按服务器架构选 `amd64` 或 `arm64`：
+
+```bash
+curl -fL -o /root/violet-mcp-relay-1.2.0-linux-amd64 https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/violet-mcp-relay-1.2.0-linux-amd64
+curl -fL -o /root/SHA256SUMS.txt https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/SHA256SUMS.txt
+cd /root && grep linux-amd64 SHA256SUMS.txt | sha256sum -c -
+```
+
+- Violet 后台的“一键安装中继”也是从 GitHub 下载的，国内服务器可能装不上，可以先按上面下载，再按 DEPLOY_RELAY 手动部署。
+- 卸载：App 在手机系统设置里卸载即可；中继在服务器上执行 `/opt/violet/violet mcp-relay uninstall`（Violet 装的）或按 DEPLOY_RELAY 删除（手动部署的），都不需要连 GitHub。
 
 **本机调试**（不经过中继）：
 
