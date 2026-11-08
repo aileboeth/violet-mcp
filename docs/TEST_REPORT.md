@@ -2,6 +2,21 @@
 
 **English** | [简体中文](TEST_REPORT.zh-CN.md)
 
+## Violet MCP 1.4.4 (relay 1.2.0 unchanged) — 2026-11-08
+
+In-app updates can go through a GitHub mirror (user: phones in mainland China cannot reach GitHub): Settings → App updates → Download source (automatic / GitHub only / p.jackyu.cn only / a custom https address), `Sources.kt`. The version check now reads `releases/latest/download/SHA256SUMS.txt` (no GitHub API any more: mirrors do not forward it). Each source may only contact GitHub's hosts plus its own host; HTTPS only. The SHA-256 / package name / version / signing certificate checks before installing are unchanged. Releases carry one more file, `SHA256SUMS.txt.sig` (`tools/release_sign.py`), which Violet checks when it installs the relay through a mirror.
+
+| Test | Result |
+|---|---|
+| mcp-core + Robolectric (`:mcp-core:test :app:testDebugUnitTest --offline`, **simulated**) | Pass, 135/135 (75 + 60); UpdateCheckerTest rewritten, 11 tests (MockWebServer plays both github.com and a mirror: redirects, falling back from source to source, each source's failure reason, only allowed hosts contacted); AppUpdaterTest +2 (download source setting, remembering which source answered) |
+| `:app:assembleDebug` / `:app:assembleRelease` (R8) | Pass; artifacts `violet-mcp-1.4.4-{debug,release}.apk`, versionCode 11 |
+| Static APK check (`tests/verify_apk.py`, debug package) | Pass, 0 failures (including `usesCleartextTraffic=false`) |
+| Mirrors (2026-11-08, from a Linux machine on China Mobile) | `p.jackyu.cn` redirects `releases/latest/download/SHA256SUMS.txt` to the tagged address (a relative address on the same host); the 1.4.3 APK, relays and SHA256SUMS.txt downloaded through it have the same SHA-256 as on GitHub |
+| `SHA256SUMS.txt.sig` | `tools/release_sign.py` signed 1.4.3's SHA256SUMS.txt with the real key; Violet's `violet_sign.check(MCP_RELAY_KEY, …)` accepts it; the Violet release key, or a file changed by one byte, is refused |
+| Signing (`tools/sign_release.py`, with the user's consent) | Pass: Android 9+ signer `d5a5eeec…` (same as 1.4.3), the old certificate for Android 8.x, lineage old → new |
+| Release package (`tools/package_release.py --version 1.4.4 --relay-version 1.2.0`) | Pass: `dist/v1.4.4/` (now with `SHA256SUMS.txt.sig`, which Violet's MCP_RELAY_KEY accepts), 0 problems in the release artifact and handoff package scans |
+| Real device (updating in the app through a mirror) | Cannot be verified (no device) |
+
 ## Violet MCP 1.4.3 (relay 1.2.0 unchanged) — 2026-11-05
 
 The GitHub account was renamed from aileboeth-web to aileboeth: in-app updates now read `aileboeth/violet-mcp` (`UpdateChecker.DEFAULT_REPO`), and the settings text names the new repository. The old name only redirects until someone else registers it. Nothing else changed.

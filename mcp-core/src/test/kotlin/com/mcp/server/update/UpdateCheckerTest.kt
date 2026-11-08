@@ -17,6 +17,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.security.MessageDigest
 
+/**
+ * 1.4.4：最新版本从 releases/latest/download/SHA256SUMS.txt 读（不用 GitHub API），可以经加速站。
+ * MockWebServer 同时扮演 github.com（[base]）和一个加速站（[mirror] 前缀）。
+ */
 class UpdateCheckerTest {
     @get:Rule
     val tmp = TemporaryFolder()
@@ -36,36 +40,44 @@ class UpdateCheckerTest {
                 routes[request.path] ?: MockResponse().setResponseCode(404)
         }
         server.start()
-        routes["/repos/o/violet-mcp/releases/latest"] = json(release("v1.4.0"))
-        routes["/dl/apk"] = MockResponse().setBody(Buffer().write(apk))
-        routes["/dl/sums"] = MockResponse().setBody(
-            "$sha *violet-mcp-1.4.0-release.apk\n${"0".repeat(64)} *violet-mcp-relay-1.2.0-linux-amd64\n")
+        publish("1.4.0")
     }
 
     @After
     fun tearDown() = server.shutdown()
 
     private fun base() = server.url("/").toString().trimEnd('/')
+    private fun mirror() = Source("custom", "${base()}/m/", "加速站 test")
 
-    private fun release(tag: String, apkName: String = "violet-mcp-${tag.trimStart('v')}-release.apk", sums: Boolean = true) = """
-        {"tag_name": "$tag", "html_url": "https://github.com/o/violet-mcp/releases/tag/$tag",
-         "published_at": "2026-10-27T00:00:00Z", "body": "notes",
-         "assets": [{"name": "$apkName", "size": ${apk.size}, "browser_download_url": "${base()}/dl/apk"}
-                    ${if (sums) """, {"name": "SHA256SUMS.txt", "size": 300, "browser_download_url": "${base()}/dl/sums"}""" else ""}]}
-    """.trimIndent()
+    /** GitHub's layout: latest/download redirects to the tagged release (a mirror answers the same on its own host) */
+    private fun publish(version: String, sums: String = defaultSums(version)) {
+        routes.clear()
+        for (prefix in listOf("", "/m/${base()}")) {
+            routes["$prefix/o/violet-mcp/releases/latest/download/SHA256SUMS.txt"] = MockResponse().setResponseCode(302)
+                .setHeader("Location", "$prefix/o/violet-mcp/releases/download/v$version/SHA256SUMS.txt")
+            routes["$prefix/o/violet-mcp/releases/download/v$version/SHA256SUMS.txt"] = MockResponse().setBody(sums)
+            routes["$prefix/o/violet-mcp/releases/download/v$version/violet-mcp-$version-release.apk"] =
+                MockResponse().setBody(Buffer().write(apk))
+        }
+    }
 
-    private fun json(body: String) = MockResponse().setBody(body).setHeader("Content-Type", "application/json")
+    private fun defaultSums(version: String) = "$sha *violet-mcp-$version-release.apk\n" +
+        "${"1".repeat(64)} *violet-mcp-1.3.0-release.apk\n${"0".repeat(64)} *violet-mcp-relay-1.2.0-linux-amd64\n"
 
-    private fun checker(hosts: Set<String> = setOf(server.hostName)) =
-        UpdateChecker(repo = "o/violet-mcp", apiBase = base(), allowedHosts = hosts, requireHttps = false)
+    private fun checker(sources: List<Source> = listOf(Source("github", "", "GitHub")),
+                        hosts: Set<String> = setOf(server.hostName)) =
+        UpdateChecker(repo = "o/violet-mcp", sources = sources, githubBase = base(), allowedHosts = hosts,
+            requireHttps = false)
 
     @Test
-    fun findsTheApkAndTheChecksumsOfTheLatestRelease() {
+    fun theNewestApkInTheChecksumsIsTheLatestRelease() {
         val r = checker().latest()
         assertEquals("1.4.0", r.version)
         assertEquals("violet-mcp-1.4.0-release.apk", r.apkName)
         assertEquals("https://github.com/o/violet-mcp/releases/tag/v1.4.0", r.pageUrl)
-        assertTrue(r.apkUrl.endsWith("/dl/apk") && r.sumsUrl.endsWith("/dl/sums"))
+        assertEquals("${base()}/o/violet-mcp/releases/download/v1.4.0/violet-mcp-1.4.0-release.apk", r.apkUrl)
+        assertEquals(sha, r.sha256)
+        assertEquals("GitHub", r.source.label)
     }
 
     @Test
@@ -76,7 +88,7 @@ class UpdateCheckerTest {
         assertTrue(target.readBytes().contentEquals(apk))
         assertFalse(tmp.root.resolve("u/update.apk.part").exists())
 
-        routes["/dl/sums"] = MockResponse().setBody("${"a".repeat(64)} *violet-mcp-1.4.0-release.apk\n")
+        publish("1.4.0", sums = "${"a".repeat(64)} *violet-mcp-1.4.0-release.apk\n")
         target.delete()
         expectError("校验失败") { c.download(c.latest(), target) }
         assertFalse(target.exists())
@@ -84,21 +96,32 @@ class UpdateCheckerTest {
     }
 
     @Test
-    fun aReleaseWithoutApkOrChecksumsIsRefused() {
-        routes["/repos/o/violet-mcp/releases/latest"] = json(release("v1.4.0", apkName = "other.apk"))
-        expectError("没有 violet-mcp-1.4.0-release.apk") { checker().latest() }
-        routes["/repos/o/violet-mcp/releases/latest"] = json(release("v1.4.0", sums = false))
-        expectError("SHA256SUMS.txt") { checker().latest() }
-        routes["/repos/o/violet-mcp/releases/latest"] = json(release("nightly"))
-        expectError("不是版本号") { checker().latest() }
+    fun throughAMirrorEverythingComesFromTheMirror() {
+        val c = checker(sources = listOf(mirror()))
+        val r = c.latest()
+        assertEquals("加速站 test", r.source.label)
+        assertTrue(r.apkUrl.startsWith("${base()}/m/${base()}/o/violet-mcp/releases/download/v1.4.0/"))
+        assertEquals(sha, c.download(r, tmp.root.resolve("m.apk")))
+        assertTrue(server.takeRequest().path!!.startsWith("/m/"))
     }
 
     @Test
-    fun noReleaseYetAndBadAnswersSayWhy() {
-        routes.remove("/repos/o/violet-mcp/releases/latest")
+    fun theNextSourceIsTriedAndEveryFailureIsExplained() {
+        val broken = Source("custom", "${base()}/broken/", "坏的来源")
+        assertEquals("加速站 test", checker(sources = listOf(broken, mirror())).latest().source.label)
+        routes.clear()
+        expectError("坏的来源：") { checker(sources = listOf(broken, mirror())).latest() }
+        expectError("加速站 test：") { checker(sources = listOf(broken, mirror())).latest() }
+    }
+
+    @Test
+    fun aReleaseWithoutAnApkOrWithBadChecksumsIsRefused() {
+        publish("1.4.0", sums = "${"0".repeat(64)} *violet-mcp-relay-1.2.0-linux-amd64\n")
+        expectError("没有安装包") { checker().latest() }
+        publish("1.4.0", sums = "not a checksum file")
+        expectError("内容不对") { checker().latest() }
+        routes.clear()
         expectError("还没有发布") { checker().latest() }
-        routes["/repos/o/violet-mcp/releases/latest"] = json("not json")
-        expectError("无法解析") { checker().latest() }
     }
 
     @Test
@@ -109,17 +132,33 @@ class UpdateCheckerTest {
 
     @Test
     fun aRedirectToAnotherHostIsRefused() {
-        routes["/dl/apk"] = MockResponse().setResponseCode(302).setHeader("Location", "http://127.0.0.2:9/evil.apk")
-        val c = checker(hosts = setOf(server.hostName))
+        routes["/o/violet-mcp/releases/download/v1.4.0/violet-mcp-1.4.0-release.apk"] =
+            MockResponse().setResponseCode(302).setHeader("Location", "http://127.0.0.2:9/evil.apk")
+        val c = checker()
         expectError("拒绝连接") { c.download(c.latest(), tmp.root.resolve("x.apk")) }
     }
 
     @Test
-    fun theDefaultCheckerOnlyTalksHttpsToGithub() {
-        val c = UpdateChecker(apiBase = "http://api.github.com")
-        expectError("拒绝连接") { c.latest() }
-        assertEquals(setOf("api.github.com", "github.com", "objects.githubusercontent.com",
-            "release-assets.githubusercontent.com"), UpdateChecker.GITHUB_HOSTS)
+    fun theDefaultCheckerOnlyTalksHttpsToGithubAndTheChosenMirror() {
+        expectError("拒绝连接") { UpdateChecker(githubBase = "http://github.com").latest() }
+        assertEquals(setOf("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"),
+            UpdateChecker.GITHUB_HOSTS)
+        assertEquals("p.jackyu.cn", Sources.BUILT_IN.single().host)
+        assertNull(Sources.GITHUB_SOURCE.host)
+    }
+
+    @Test
+    fun sourcesFollowTheChoiceAndOnlyHttpsCustomAddresses() {
+        assertEquals(listOf("github", "jackyu"), Sources.list("auto", null).map { it.key })
+        assertEquals(listOf("github"), Sources.list("github", null).map { it.key })
+        assertEquals(listOf("jackyu"), Sources.list("jackyu", null).map { it.key })
+        assertEquals(listOf("https://gh.example.com/"), Sources.list("custom", "https://gh.example.com").map { it.prefix })
+        assertEquals(listOf("github", "jackyu"), Sources.list("custom", "http://8.217.135.233:9999/").map { it.key })
+        assertEquals(listOf("github", "jackyu"), Sources.list("bogus", null).map { it.key })
+        assertEquals("https://p.jackyu.cn/https://github.com/a", Sources.BUILT_IN.single().url("https://github.com/a"))
+        for (bad in listOf("https://github.com/", "https://u:p@gh.example.com/", "https://gh.example.com/?x=1", "", "ftp://x/")) {
+            assertNull(bad, Sources.customChecked(bad))
+        }
     }
 
     @Test

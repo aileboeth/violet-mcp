@@ -2,6 +2,15 @@
 
 **English** | [简体中文](UPGRADE.zh-CN.md)
 
+## Violet MCP 1.4.3 → 1.4.4 (download source / GitHub mirrors; relay unchanged)
+
+- Install `violet-mcp-1.4.4-release.apk` over the old one: token, relay configuration and tool switches are all kept, and nothing changes on Violet's side. If the phone cannot reach GitHub, download this one through the mirror links in the Chinese README ("国内网络：GitHub 加速地址").
+- New: Settings → App updates → Download source. Default "automatic": GitHub first, then the GitHub mirror `https://p.jackyu.cn/`; or GitHub only, p.jackyu.cn only, or your own https mirror address. HTTPS only (the app still allows no cleartext connection at all).
+- Checking for a new version now reads the release's `SHA256SUMS.txt` (`releases/latest/download/SHA256SUMS.txt`) instead of `api.github.com`: mirrors do not forward the GitHub API, and the API allows only 60 requests an hour. The release notes button still opens the release page on GitHub.
+- The checks before installing are unchanged: SHA-256, package name, version number and signing certificate must all match, so a mirror cannot change the APK.
+- Releases carry one more file, `SHA256SUMS.txt.sig` (signed by `tools/release_sign.py` with `signing/relay-sums-ed25519.key`): Violet 0.7.59 and later check it when the one-click relay install downloads through a mirror.
+- Rolling back: `adb install -r -d` with 1.4.3, or uninstall and reinstall (data is wiped).
+
 ## Violet MCP 1.3.0 → 1.4.0 (in-app updates; relay unchanged)
 
 - Install `violet-mcp-1.4.0-release.apk` over the old one (same package name and signature as 1.3.0): token, relay configuration and tool switches are all kept, and nothing changes on Violet's side.

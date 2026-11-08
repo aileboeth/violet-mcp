@@ -25,7 +25,7 @@ Violet MCP 是给 **[Violet](https://github.com/aileboeth/violet-companion)**（
 - **新增**：感知手机状态的只读工具。
 - **替换**：原来的明文隧道改成“手机主动连接你自己 VPS 的 TLS 中继”。
 
-当前版本：应用 **Violet MCP 1.4.3**（包名 `com.mcp.server.violet`），中继 **violet-mcp-relay 1.2.0**。
+当前版本：应用 **Violet MCP 1.4.4**（包名 `com.mcp.server.violet`），中继 **violet-mcp-relay 1.2.0**。
 
 ## 特点
 
@@ -52,7 +52,8 @@ Violet MCP 是给 **[Violet](https://github.com/aileboeth/violet-companion)**（
   - 服务状态分运行、受限、已停止三种；你手动停止后不会被自动拉起来。
 - **应用内更新**：
   - 设置 → 应用更新，可选“自动更新”（默认）、“只提醒”、“手动检查”。
-  - 只从本仓库的 GitHub Releases 下载，下载后核对 `SHA256SUMS.txt`、包名、版本号和签名证书，任何一项不对都不安装。
+  - 从本仓库的 GitHub Releases 下载。1.4.4 起可以选“下载来源”：默认“自动”（先连 GitHub，连不上再试加速站 p.jackyu.cn），也可以只用 GitHub、只用 p.jackyu.cn，或者填自己的 https 加速地址。
+  - 下载后核对 `SHA256SUMS.txt`、包名、版本号和签名证书，任何一项不对都不安装，所以加速站改不了安装包。
   - 第一次需要在系统设置里允许本应用“安装未知应用”。
 - **不需要 Root，不需要无障碍权限。**
 
@@ -82,25 +83,25 @@ Violet MCP 是给 **[Violet](https://github.com/aileboeth/violet-companion)**（
 
 | 加速站 | 说明 |
 |---|---|
-| `https://p.jackyu.cn/` | 推荐，HTTPS |
-| `http://8.217.135.233:9999/` | 备用，下载更快，但是明文 HTTP |
+| `https://p.jackyu.cn/` | HTTPS，有时比较慢 |
+| `http://8.217.135.233:9999/` | 明文 HTTP，通常更快。应用内更新不用它（本应用不允许任何明文连接），在手机浏览器里下载可以用 |
 
 2026-11-08 在国内网络（中国移动）实测，两个都能用，下载的 APK 和中继程序与 GitHub 上的完全一致（SHA-256 相同）。加速站是别人提供的免费服务，不归本项目管，随时可能失效；能直接连上 GitHub 时请用官方地址。
 
 - **下载或手动更新 App**（在手机浏览器里打开，下载后直接覆盖安装，令牌、中继配置和工具开关都会保留）：
-  - https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/violet-mcp-1.4.3-release.apk
-  - 备用：http://8.217.135.233:9999/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/violet-mcp-1.4.3-release.apk
-  - 以后有新版本时，把地址里的两处 `1.4.3` 换成新的版本号（最新版本号见本页开头的“当前版本”）
-- **应用内更新**还是直接连 GitHub（检查新版本用的是 GitHub API，加速站不支持）。手机连不上时它会显示检查失败，这时按上面的方法下载新版 APK 覆盖安装。
+  - https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.4/violet-mcp-1.4.4-release.apk
+  - 备用：http://8.217.135.233:9999/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.4/violet-mcp-1.4.4-release.apk
+  - 以后有新版本时，把地址里的两处 `1.4.4` 换成新的版本号（最新版本号见本页开头的“当前版本”）
+- **应用内更新**：1.4.4 起在“设置 → 应用更新 → 下载来源”里设置，默认“自动”，GitHub 连不上会自动改用 p.jackyu.cn。1.4.3 及更早的版本只能直连 GitHub，手机连不上时先按上面的链接手动装一次 1.4.4。
 - **中继程序**（手动部署时用，见 [docs/DEPLOY_RELAY.md](docs/DEPLOY_RELAY.zh-CN.md)）：在服务器上执行，按服务器架构选 `amd64` 或 `arm64`：
 
 ```bash
-curl -fL -o /root/violet-mcp-relay-1.2.0-linux-amd64 https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/violet-mcp-relay-1.2.0-linux-amd64
-curl -fL -o /root/SHA256SUMS.txt https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.3/SHA256SUMS.txt
+curl -fL -o /root/violet-mcp-relay-1.2.0-linux-amd64 https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.4/violet-mcp-relay-1.2.0-linux-amd64
+curl -fL -o /root/SHA256SUMS.txt https://p.jackyu.cn/https://github.com/aileboeth/violet-mcp/releases/download/v1.4.4/SHA256SUMS.txt
 cd /root && grep linux-amd64 SHA256SUMS.txt | sha256sum -c -
 ```
 
-- Violet 后台的“一键安装中继”也是从 GitHub 下载的，国内服务器可能装不上，可以先按上面下载，再按 DEPLOY_RELAY 手动部署。
+- **Violet 后台的“一键安装中继”**：Violet 0.7.59 起按 Violet 后台的“下载来源”下载，经加速站下载时还要核对本仓库的发布签名（`SHA256SUMS.txt.sig`，1.4.4 起每个版本都有），签名不对就不安装。更早的 Violet 可以先按上面下载，再按 DEPLOY_RELAY 手动部署。
 - 卸载：App 在手机系统设置里卸载即可；中继在服务器上执行 `/opt/violet/violet mcp-relay uninstall`（Violet 装的）或按 DEPLOY_RELAY 删除（手动部署的），都不需要连 GitHub。
 
 **本机调试**（不经过中继）：

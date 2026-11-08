@@ -2,6 +2,21 @@
 
 [English](TEST_REPORT.md) | **简体中文**
 
+## Violet MCP 1.4.4（中继 1.2.0 不变）— 2026-11-08
+
+应用内更新可以经 GitHub 加速站（用户：国内手机连不上 GitHub）：设置 → 应用更新 → 下载来源（自动 / 只用 GitHub / 只用 p.jackyu.cn / 自定义 https 地址），`Sources.kt`。检查新版本改读 `releases/latest/download/SHA256SUMS.txt`（不再用 GitHub API：加速站不转发 API）。每个来源只允许 GitHub 的主机加上这个来源自己的主机；只用 HTTPS。安装前的 SHA-256 / 包名 / 版本 / 签名证书检查不变。发布多了 `SHA256SUMS.txt.sig`（`tools/release_sign.py`），给 Violet 经加速站安装中继时核对。
+
+| 测试 | 结果 |
+|---|---|
+| mcp-core + Robolectric（`:mcp-core:test :app:testDebugUnitTest --offline`，**模拟**） | 通过，135/135（75 + 60）；UpdateCheckerTest 改写为 11 项（MockWebServer 同时扮演 github.com 和加速站：跳转、依次换来源、每个来源的失败原因、只连允许的主机），AppUpdaterTest 新增 2 项（下载来源设置、记住是哪个来源） |
+| `:app:assembleDebug` / `:app:assembleRelease`（R8） | 通过；产物 `violet-mcp-1.4.4-{debug,release}.apk`，versionCode 11 |
+| APK 静态检查（`tests/verify_apk.py`，debug 包） | 通过，失败 0 项（包括 `usesCleartextTraffic=false`） |
+| 加速站（2026-11-08，在中国移动网络的 Linux 上） | `p.jackyu.cn` 把 `releases/latest/download/SHA256SUMS.txt` 跳转到带版本号的地址（同一主机上的相对地址）；经它下载的 1.4.3 APK、中继和 SHA256SUMS.txt 与 GitHub 上的 SHA-256 相同 |
+| `SHA256SUMS.txt.sig` | `tools/release_sign.py` 用真实私钥签 1.4.3 的 SHA256SUMS.txt，Violet 的 `violet_sign.check(MCP_RELAY_KEY, …)` 验证通过；用 Violet 发布公钥验证、或文件改一个字节后验证都失败 |
+| 签名（`tools/sign_release.py`，用户同意） | 通过：Android 9+ 签名者 `d5a5eeec…`（与 1.4.3 相同），Android 8.x 为旧证书，lineage 旧 → 新 |
+| 发布包（`tools/package_release.py --version 1.4.4 --relay-version 1.2.0`） | 通过：`dist/v1.4.4/`（多了 `SHA256SUMS.txt.sig`，Violet 的 MCP_RELAY_KEY 验证通过），发布产物和交接包扫描问题 0 个 |
+| 真机（经加速站在应用里更新） | 无法验证（没有设备） |
+
 ## Violet MCP 1.4.3（中继 1.2.0 不变）— 2026-11-05
 
 GitHub 账号从 aileboeth-web 改名为 aileboeth：应用内更新改为读取 `aileboeth/violet-mcp`（`UpdateChecker.DEFAULT_REPO`），设置页的说明文字也改成新仓库名。旧名字只在没人注册它之前会跳转。其他没有变化。

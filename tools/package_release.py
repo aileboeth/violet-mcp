@@ -9,7 +9,8 @@
      apksigner verify 不通过（例如忘了运行 tools/sign_release.py）就拒绝。
   3. 编译 Linux amd64 / arm64 中继（需要 go 在 PATH 中）。
   4. 源码包 = tools/make_handoff.py 生成的交接包（git 文件 + 黑名单过滤 + 文件清单），生成后立即扫描 ZIP 本身。
-  5. 写 SHA256SUMS.txt（LF 换行，可直接 sha256sum -c）。
+  5. 写 SHA256SUMS.txt（LF 换行，可直接 sha256sum -c），并用 signing/relay-sums-ed25519.key 签名成
+     SHA256SUMS.txt.sig（1.4.4；Violet 经 GitHub 加速站下载中继时核对，见 tools/release_sign.py）。
   6. 对整个输出目录运行发布产物检查（递归进入 APK / ZIP / JAR），结果写入 SCAN_REPORT-release.json；
      交接包的结构检查结果写入 SCAN_REPORT-handoff.json。
      任何一项发现问题，就删除整个输出目录并以非零退出。
@@ -55,6 +56,10 @@ def main() -> int:
     spec = importlib.util.spec_from_file_location("make_handoff", ROOT / "tools/make_handoff.py")
     handoff = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(handoff)
+    spec = importlib.util.spec_from_file_location("release_sign", ROOT / "tools/release_sign.py")
+    signer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(signer)
+    seed = signer.load_key()            # before building anything: no key, no release
 
     out.mkdir(parents=True)
     try:
@@ -77,6 +82,8 @@ def main() -> int:
             sums.append(f"{hashlib.sha256(p.read_bytes()).hexdigest()} *{p.name}")
         # 固定用 LF：Windows 上 write_text 会写 CRLF，sha256sum -c 无法校验
         (out / "SHA256SUMS.txt").write_bytes(("\n".join(sums) + "\n").encode("utf-8"))
+        # 1.4.4：Violet 经 GitHub 加速站下载中继时要核对这个签名（tools/release_sign.py）
+        signer.sign_file(out / "SHA256SUMS.txt", seed)
 
         rel = out.relative_to(ROOT).as_posix()
         check = subprocess.run([sys.executable, "-I", "-X", "utf8", str(ROOT / "tests/check_release_artifacts.py"),

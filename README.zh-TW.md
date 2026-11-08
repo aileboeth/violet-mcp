@@ -25,7 +25,7 @@ Violet MCP 是給 **[Violet](https://github.com/aileboeth/violet-companion)**（
 - **新增**：感知手機狀態的唯讀工具。
 - **替換**：原本的明文通道改成「手機主動連到你自己 VPS 的 TLS 中繼」。
 
-目前版本：App **Violet MCP 1.4.3**（套件名稱 `com.mcp.server.violet`），中繼 **violet-mcp-relay 1.2.0**。
+目前版本：App **Violet MCP 1.4.4**（套件名稱 `com.mcp.server.violet`），中繼 **violet-mcp-relay 1.2.0**。
 
 App 介面目前是簡體中文。
 
@@ -54,7 +54,8 @@ App 介面目前是簡體中文。
   - 服務狀態分為執行中、受限、已停止三種；你手動停止後不會被自動拉起。
 - **App 內更新**：
   - 設定 → App 更新，可選「自動更新」（預設）、「只提醒」、「手動檢查」。
-  - 只從本儲存庫的 GitHub Releases 下載，下載後核對 `SHA256SUMS.txt`、套件名稱、版本號和簽署憑證，任何一項不符都不安裝。
+  - 從本儲存庫的 GitHub Releases 下載。1.4.4 起可以選「下載來源」：預設「自動」（先連 GitHub，連不上再試加速站 p.jackyu.cn），也可以只用 GitHub、只用 p.jackyu.cn，或填自己的 https 加速位址。
+  - 下載後核對 `SHA256SUMS.txt`、套件名稱、版本號和簽署憑證，任何一項不符都不安裝。
   - 第一次需要在系統設定裡允許本 App「安裝不明應用程式」。
 - **不需要 Root，不需要無障礙權限。**
 

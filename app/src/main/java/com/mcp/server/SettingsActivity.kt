@@ -12,6 +12,7 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,6 +70,7 @@ import com.mcp.server.server.Settings
 import com.mcp.server.server.WakeLockHelper
 import com.mcp.server.tools.UsageTools
 import com.mcp.server.ui.theme.McpTheme
+import com.mcp.server.update.Sources
 import kotlinx.coroutines.delay
 
 class SettingsActivity : ComponentActivity() {
@@ -246,6 +248,9 @@ fun SettingsScreen(
 private fun UpdateCard(canInstall: Boolean) {
     val context = LocalContext.current
     var mode by remember { mutableStateOf(AppUpdater.mode(context)) }
+    var sourceChoice by remember { mutableStateOf(AppUpdater.sourceChoice(context)) }
+    var mirror by remember { mutableStateOf(AppUpdater.customMirror(context)) }
+    var mirrorOk by remember { mutableStateOf(true) }
     var upd by remember { mutableStateOf(AppUpdater.state) }
     LaunchedEffect(Unit) {
         AppUpdater.restore(context)
@@ -284,6 +289,46 @@ private fun UpdateCard(canInstall: Boolean) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // 1.4.4 (user 2026-11-08): phones in mainland China often cannot reach GitHub -> a GitHub mirror
+            Spacer(Modifier.height(10.dp))
+            Text("下载来源", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                for ((value, label) in Sources.CHOICES) {
+                    FilterChip(selected = sourceChoice == value, onClick = {
+                        sourceChoice = value
+                        AppUpdater.setSource(context, value)
+                    }, label = { Text(label) })
+                }
+            }
+            if (sourceChoice == Sources.CUSTOM) {
+                OutlinedTextField(
+                    value = mirror,
+                    onValueChange = { v ->
+                        mirror = v.trim().take(300)
+                        mirrorOk = mirror.isEmpty() || Sources.customChecked(mirror) != null
+                        if (mirrorOk) AppUpdater.setSource(context, Sources.CUSTOM, mirror)
+                    },
+                    label = { Text("加速地址（https://…/）") },
+                    singleLine = true,
+                    isError = !mirrorOk,
+                    supportingText = {
+                        Text(if (mirrorOk) "放在 GitHub 地址前面的一段，例如 https://gh.example.com/"
+                        else "要以 https:// 开头，不能是 github.com 本身，不能带用户名或 ? 参数")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Text(
+                when (sourceChoice) {
+                    Sources.AUTO -> "先连 GitHub，连不上再试加速站 p.jackyu.cn。"
+                    Sources.GITHUB -> "只从 GitHub 下载。"
+                    Sources.JACKYU -> "只从加速站 p.jackyu.cn 下载（别人提供的免费 GitHub 加速服务）。"
+                    else -> "只从你填的加速地址下载；地址不对时按“自动”处理。"
+                } + (upd.source?.let { " 上次检查来自：$it。" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             upd.message?.let {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -311,7 +356,8 @@ private fun UpdateCard(canInstall: Boolean) {
                 }
             }
             Text(
-                "只从 GitHub（aileboeth/violet-mcp）下载；安装前核对 SHA-256、包名、版本号和签名证书，任何一项不符都不安装。",
+                "从 GitHub（aileboeth/violet-mcp）或你选的加速站下载；安装前核对 SHA-256、包名、版本号和签名证书，" +
+                    "任何一项不符都不安装，所以加速站改不了安装包。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

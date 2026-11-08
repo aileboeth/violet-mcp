@@ -2,6 +2,15 @@
 
 [English](UPGRADE.md) | **简体中文**
 
+## Violet MCP 1.4.3 → 1.4.4（下载来源 / GitHub 加速站；中继不变）
+
+- 直接覆盖安装 `violet-mcp-1.4.4-release.apk`：令牌、中继配置、工具开关都保留，Violet 那边不用改。手机连不上 GitHub 时，用 README“国内网络：GitHub 加速地址”里的链接下载这一次。
+- 新增：设置 → 应用更新 → 下载来源。默认“自动”：先连 GitHub，连不上再试加速站 `https://p.jackyu.cn/`；也可以只用 GitHub、只用 p.jackyu.cn，或者填自己的 https 加速地址。只用 HTTPS（应用仍然不允许任何明文连接）。
+- 检查新版本改为读发布里的 `SHA256SUMS.txt`（`releases/latest/download/SHA256SUMS.txt`），不再访问 `api.github.com`：加速站不转发 GitHub API，API 每小时还限 60 次。更新说明按钮仍然打开 GitHub 上的发布页。
+- 安装前的检查不变：SHA-256、包名、版本号、签名证书任何一项不符都不安装，所以加速站改不了安装包。
+- 发布多了一个文件 `SHA256SUMS.txt.sig`（`tools/release_sign.py` 用 `signing/relay-sums-ed25519.key` 签名）：Violet 0.7.59 起经加速站“一键安装中继”时核对它。
+- 回退：用 `adb install -r -d` 装回 1.4.3，或卸载后重装（数据会清空）。
+
 ## Violet MCP 1.3.0 → 1.4.0（应用内更新；中继不变）
 
 - 直接覆盖安装 `violet-mcp-1.4.0-release.apk`（包名、签名都与 1.3.0 相同）：令牌、中继配置、工具开关都保留，Violet 那边不用改。

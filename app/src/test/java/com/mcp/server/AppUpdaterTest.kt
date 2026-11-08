@@ -68,9 +68,33 @@ class AppUpdaterTest {
     }
 
     @Test
+    fun theDownloadSourceDefaultsToAutoAndACustomAddressIsChecked() {
+        assertEquals("auto", AppUpdater.sourceChoice(app))
+        assertEquals(listOf("github", "jackyu"), AppUpdater.sources(app).map { it.key })
+        AppUpdater.setSource(app, "jackyu")
+        assertEquals(listOf("https://p.jackyu.cn/"), AppUpdater.sources(app).map { it.prefix })
+        assertFalse(AppUpdater.setSource(app, "custom", "http://8.217.135.233:9999/"))   // no cleartext in this app
+        assertEquals("jackyu", AppUpdater.sourceChoice(app))                           // nothing changed
+        assertTrue(AppUpdater.setSource(app, "custom", "https://gh.example.com"))
+        assertEquals(listOf("https://gh.example.com/"), AppUpdater.sources(app).map { it.prefix })
+        Settings.prefs(app).edit().putString("update_source", "bogus").commit()
+        assertEquals("auto", AppUpdater.sourceChoice(app))
+    }
+
+    @Test
+    fun theSourceThatAnsweredIsRemembered() {
+        val src = FakeSource("99.0.0")
+        AppUpdater.setMode(app, AppUpdater.MODE_NOTIFY)
+        AppUpdater.source = { _ -> src }
+        AppUpdater.runCheck(app, userAsked = true)
+        assertEquals("GitHub", AppUpdater.state.source)
+        assertEquals("GitHub", Settings.prefs(app).getString("update_from", null))
+    }
+
+    @Test
     fun aCheckIsDueAgainAfterSixHours() {
         val src = FakeSource(BuildConfig.VERSION_NAME)
-        AppUpdater.source = { src }
+        AppUpdater.source = { _ -> src }
         AppUpdater.runCheck(app, userAsked = false)
         val at = AppUpdater.lastCheckAt(app)
         assertFalse(AppUpdater.isDue(app, at + AppUpdater.CHECK_INTERVAL_MS - 1))
@@ -83,7 +107,7 @@ class AppUpdaterTest {
     fun notifyModeReportsButDoesNotDownload() {
         AppUpdater.setMode(app, AppUpdater.MODE_NOTIFY)
         val src = FakeSource("99.0.0")
-        AppUpdater.source = { src }
+        AppUpdater.source = { _ -> src }
         AppUpdater.runCheck(app, userAsked = false)
         assertEquals(AppUpdater.Phase.AVAILABLE, AppUpdater.state.phase)
         assertTrue(AppUpdater.state.newer)
@@ -94,7 +118,7 @@ class AppUpdaterTest {
     @Test
     fun aDownloadThatIsNotASignedVioletMcpIsDeletedAndNeverInstalled() {
         val src = FakeSource("99.0.0")
-        AppUpdater.source = { src }
+        AppUpdater.source = { _ -> src }
         AppUpdater.runCheck(app, userAsked = true, install = true)
         assertEquals(1, src.downloads)
         assertEquals(AppUpdater.Phase.ERROR, AppUpdater.state.phase)
@@ -106,7 +130,7 @@ class AppUpdaterTest {
     @Test
     fun automaticModeDownloadsByItself() {
         val src = FakeSource("99.0.0")
-        AppUpdater.source = { src }
+        AppUpdater.source = { _ -> src }
         AppUpdater.runCheck(app, userAsked = false)
         assertEquals(1, src.downloads)                     // then refused by the checks (fake bytes)
         assertTrue(installs.isEmpty())
@@ -115,7 +139,7 @@ class AppUpdaterTest {
     @Test
     fun aFailedCheckIsShownAndRemembered() {
         val src = FakeSource("99.0.0").apply { fail = "网络不通或被拦截（UnknownHostException）" }
-        AppUpdater.source = { src }
+        AppUpdater.source = { _ -> src }
         AppUpdater.runCheck(app, userAsked = true)
         assertEquals(AppUpdater.Phase.ERROR, AppUpdater.state.phase)
         assertEquals("网络不通或被拦截（UnknownHostException）", Settings.prefs(app).getString("update_error", null))
@@ -124,7 +148,7 @@ class AppUpdaterTest {
     @Test
     fun theLastResultSurvivesARestartOfTheApp() {
         AppUpdater.setMode(app, AppUpdater.MODE_NOTIFY)
-        AppUpdater.source = { FakeSource("99.0.0") }
+        AppUpdater.source = { _ -> FakeSource("99.0.0") }
         AppUpdater.runCheck(app, userAsked = false)
         AppUpdater.resetForTest()
         AppUpdater.restore(app)

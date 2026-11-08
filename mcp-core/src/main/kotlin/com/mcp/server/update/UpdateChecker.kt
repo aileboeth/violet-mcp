@@ -5,7 +5,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -18,32 +17,34 @@ interface ReleaseSource {
 }
 
 /**
- * 应用自身的更新检查与下载（Violet MCP 1.4.0）。纯 JVM，不依赖 Android。
+ * 应用自身的更新检查与下载（Violet MCP 1.4.0；1.4.4 起可经 GitHub 加速站）。纯 JVM，不依赖 Android。
  *
- * - 来源只有 GitHub Releases：`https://api.github.com/repos/<repo>/releases/latest`，不登录。
- * - 安装包按命名约定找：`violet-mcp-<版本>-release.apk`；校验值来自同一发布的 `SHA256SUMS.txt`。
- * - 每一次请求（包括 GitHub 下载时的跳转）都只允许 https 和 [allowedHosts] 中的主机，在连接之前检查；
- *   安装包大小有上限。
+ * - 最新版本从发布自带的 `SHA256SUMS.txt` 读：`<来源前缀>https://github.com/<repo>/releases/latest/download/
+ *   SHA256SUMS.txt`（1.4.4 起不再用 GitHub API：加速站不转发 API，API 每小时还限 60 次）。里面版本号最高的
+ *   `violet-mcp-<版本>-release.apk` 就是要装的，它的校验值也在这个文件里。
+ * - [sources] 按顺序试（[Sources]：GitHub、内置加速站、自定义地址），前一个失败就试下一个，全部失败时
+ *   列出每个来源的原因。
+ * - 每一次请求（包括跳转）都只允许 https 和 GitHub 的主机 + 当前来源的主机，在连接之前检查；安装包大小有上限。
  * - 下载的文件在 SHA-256 与 SHA256SUMS.txt 一致后才保留，否则删除并报错。
  *
- * 安装前的包名、签名证书、版本号检查在 App 侧完成（需要 PackageManager）。
+ * 安装前的包名、签名证书、版本号检查在 App 侧完成（需要 PackageManager）——加速站改了安装包也装不上。
  *
  * 单独放在 com.mcp.server.update 包里：协议核心 com.mcp.server.core 和工具包仍然不允许任何写文件操作
  * （tests/verify_apk.py 检查），只有这里和 AppUpdater 可以写、删自己缓存目录里的安装包。
  */
 class UpdateChecker(
     private val repo: String = DEFAULT_REPO,
-    private val apiBase: String = "https://api.github.com",
+    private val sources: List<Source> = listOf(Sources.GITHUB_SOURCE),
+    private val githubBase: String = "https://github.com",
     private val allowedHosts: Set<String> = GITHUB_HOSTS,
     private val requireHttps: Boolean = true,
 ) : ReleaseSource {
     companion object {
         const val DEFAULT_REPO = "aileboeth/violet-mcp"
-        val GITHUB_HOSTS = setOf("api.github.com", "github.com", "objects.githubusercontent.com",
-            "release-assets.githubusercontent.com")
+        val GITHUB_HOSTS = setOf("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
         const val MAX_APK_BYTES = 64L * 1024 * 1024
-        private const val MAX_JSON_BYTES = 2L * 1024 * 1024
         private const val MAX_SUMS_BYTES = 64L * 1024
+        private val APK = Regex("^violet-mcp-(\\d+\\.\\d+\\.\\d+)-release\\.apk$")
     }
 
     class UpdateException(message: String) : IOException(message)
@@ -58,6 +59,8 @@ class UpdateChecker(
         val apkUrl: String,
         val apkSize: Long,
         val sumsUrl: String,
+        val sha256: String? = null,
+        val source: Source = Sources.GITHUB_SOURCE,
     )
 
     // redirects are followed by hand (open): every hop is checked BEFORE anything connects to it
@@ -68,17 +71,19 @@ class UpdateChecker(
         .followSslRedirects(false)
         .build()
 
-    private fun checkUrl(url: HttpUrl) {
-        if ((requireHttps && !url.isHttps) || url.host !in allowedHosts) {
-            throw UpdateException("拒绝连接 ${url.host}：更新只从 GitHub 下载")
+    private fun hostsFor(source: Source): Set<String> = source.host?.let { allowedHosts + it } ?: allowedHosts
+
+    private fun checkUrl(url: HttpUrl, hosts: Set<String>) {
+        if ((requireHttps && !url.isHttps) || url.host !in hosts) {
+            throw UpdateException("拒绝连接 ${url.host}：更新只从 GitHub 或你选的加速站下载")
         }
     }
 
-    /** GET [url], following at most 5 redirects, each one inside [allowedHosts]. The caller closes the response. */
-    private fun open(url: String, accept: String? = null): Response {
+    /** GET [url], following at most 5 redirects, each one inside [hosts]. The caller closes the response. */
+    private fun open(url: String, hosts: Set<String>, accept: String? = null): Response {
         var current = url.toHttpUrlOrNull() ?: throw UpdateException("地址不正确")
         repeat(6) {
-            checkUrl(current)
+            checkUrl(current, hosts)
             val request = Request.Builder().url(current).header("User-Agent", "violet-mcp-updater")
                 .apply { if (accept != null) header("Accept", accept) }.build()
             val resp = try {
@@ -94,43 +99,42 @@ class UpdateChecker(
         throw UpdateException("下载地址跳转次数太多")
     }
 
-    /** 最新发布。没有安装包、没有校验文件或版本号不规范时报错（中文原因） */
+    /** 最新发布：按顺序试每个来源。全部失败时报错，列出每个来源的原因（中文） */
     override fun latest(): Release {
-        val body = get("$apiBase/repos/$repo/releases/latest", MAX_JSON_BYTES, "application/vnd.github+json")
-        val data = try {
-            JSONObject(String(body, Charsets.UTF_8))
-        } catch (e: Exception) {
-            throw UpdateException("GitHub 返回的内容无法解析")
-        }
-        val tag = data.optString("tag_name")
-        val version = tag.trimStart('v', 'V')
-        if (Versions.key(version) == null) throw UpdateException("最新发布的标签 $tag 不是版本号")
-        val assets = data.optJSONArray("assets") ?: throw UpdateException("最新发布 $tag 没有附件")
-        val apkName = "violet-mcp-$version-release.apk"
-        var apk: JSONObject? = null
-        var sums: JSONObject? = null
-        for (i in 0 until assets.length()) {
-            val a = assets.optJSONObject(i) ?: continue
-            when (a.optString("name")) {
-                apkName -> apk = a
-                "SHA256SUMS.txt" -> sums = a
+        val reasons = mutableListOf<String>()
+        for (source in sources.ifEmpty { listOf(Sources.GITHUB_SOURCE) }) {
+            try {
+                return latestFrom(source)
+            } catch (e: UpdateException) {
+                reasons += "${source.label}：${e.message}"
             }
         }
-        if (apk == null) throw UpdateException("最新发布 $tag 里没有 $apkName")
-        if (sums == null) throw UpdateException("最新发布 $tag 里没有 SHA256SUMS.txt，无法校验，不更新")
+        throw UpdateException(reasons.joinToString("；"))
+    }
+
+    private fun latestFrom(source: Source): Release {
+        val text = String(get(source.url("$githubBase/$repo/releases/latest/download/SHA256SUMS.txt"),
+            MAX_SUMS_BYTES, hostsFor(source)), Charsets.UTF_8)
+        val sums = parseSums(text)
+        if (sums.isEmpty()) throw UpdateException("SHA256SUMS.txt 的内容不对，不更新")
+        val found = sums.keys.mapNotNull { name ->
+            APK.find(name)?.groupValues?.get(1)?.let { v -> Versions.key(v)?.let { key -> Triple(name, v, key) } }
+        }.maxWithOrNull(compareBy({ it.third.first }, { it.third.second }, { it.third.third }))
+            ?: throw UpdateException("最新发布里没有安装包（violet-mcp-<版本>-release.apk）")
+        val (apkName, version, _) = found
+        val tag = "v$version"
+        val download = "$githubBase/$repo/releases/download/$tag"
         return Release(
-            tag = tag, version = version,
-            pageUrl = data.optString("html_url").takeIf { it.startsWith("https://github.com/") },
-            publishedAt = data.optString("published_at").ifBlank { null },
-            notes = data.optString("body").take(4000),
-            apkName = apkName, apkUrl = apk.optString("browser_download_url"), apkSize = apk.optLong("size", -1),
-            sumsUrl = sums.optString("browser_download_url"),
+            tag = tag, version = version, pageUrl = "https://github.com/$repo/releases/tag/$tag",
+            publishedAt = null, notes = "", apkName = apkName, apkUrl = source.url("$download/$apkName"),
+            apkSize = -1, sumsUrl = source.url("$download/SHA256SUMS.txt"), sha256 = sums[apkName], source = source,
         )
     }
 
     /** SHA256SUMS.txt 里安装包的 SHA-256（小写十六进制） */
     fun expectedSha256(release: Release): String {
-        val text = String(get(release.sumsUrl, MAX_SUMS_BYTES), Charsets.UTF_8)
+        release.sha256?.let { return it }
+        val text = String(get(release.sumsUrl, MAX_SUMS_BYTES, hostsFor(release.source)), Charsets.UTF_8)
         return parseSums(text)[release.apkName]
             ?: throw UpdateException("SHA256SUMS.txt 里没有 ${release.apkName}，不更新")
     }
@@ -146,7 +150,7 @@ class UpdateChecker(
         target.parentFile?.mkdirs()
         val digest = MessageDigest.getInstance("SHA-256")
         try {
-            open(release.apkUrl).use { resp ->
+            open(release.apkUrl, hostsFor(release.source)).use { resp ->
                     if (!resp.isSuccessful) throw UpdateException("下载安装包失败：HTTP ${resp.code}")
                     val body = resp.body ?: throw UpdateException("下载安装包失败：没有内容")
                     val total = body.contentLength()
@@ -181,12 +185,12 @@ class UpdateChecker(
         }
     }
 
-    private fun get(url: String, limit: Long, accept: String? = null): ByteArray {
+    private fun get(url: String, limit: Long, hosts: Set<String>, accept: String? = null): ByteArray {
         try {
-            open(url, accept).use { resp ->
+            open(url, hosts, accept).use { resp ->
                 if (resp.code == 404) throw UpdateException("$repo 还没有发布任何版本")
-                if (!resp.isSuccessful) throw UpdateException("GitHub 返回 ${resp.code}")
-                val source = resp.body?.source() ?: throw UpdateException("GitHub 没有返回内容")
+                if (!resp.isSuccessful) throw UpdateException("返回错误 ${resp.code}")
+                val source = resp.body?.source() ?: throw UpdateException("没有返回内容")
                 if (source.request(limit + 1)) throw UpdateException("返回的内容太大")   // more than limit bytes
                 return source.buffer.readByteArray()
             }

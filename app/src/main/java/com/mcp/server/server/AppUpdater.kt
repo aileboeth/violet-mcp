@@ -14,6 +14,8 @@ import android.os.Build
 import com.mcp.server.BuildConfig
 import com.mcp.server.MainActivity
 import com.mcp.server.update.ReleaseSource
+import com.mcp.server.update.Source
+import com.mcp.server.update.Sources
 import com.mcp.server.update.UpdateChecker
 import com.mcp.server.update.Versions
 import java.io.File
@@ -54,6 +56,7 @@ object AppUpdater {
         val progress: Int = -1,
         val checkedAt: Long = 0L,
         val pageUrl: String? = null,
+        val source: String? = null,          // 1.4.4: which download source answered (GitHub / a mirror)
     ) {
         val newer: Boolean get() = Versions.isNewer(latest, BuildConfig.VERSION_NAME)
     }
@@ -62,9 +65,9 @@ object AppUpdater {
     var state: State = State()
         private set
 
-    /** 仅测试替换：发布来源 */
+    /** 发布来源（1.4.4：按设置里的“下载来源”；仅测试替换） */
     @Volatile
-    internal var source: () -> ReleaseSource = { UpdateChecker() }
+    internal var source: (Context) -> ReleaseSource = { ctx -> UpdateChecker(sources = sources(ctx)) }
 
     /** 仅测试替换：安装（真机用 PackageInstaller） */
     @Volatile
@@ -84,6 +87,26 @@ object AppUpdater {
         Settings.prefs(context).edit().putString("update_mode", mode).apply()
     }
 
+    /** 1.4.4：下载来源（[Sources.CHOICES]，默认“自动”：先 GitHub，连不上再试加速站） */
+    fun sourceChoice(context: Context): String =
+        Sources.choiceChecked(Settings.prefs(context).getString("update_source", Sources.AUTO))
+
+    fun customMirror(context: Context): String = Settings.prefs(context).getString("update_mirror", "") ?: ""
+
+    /** 保存选择；自定义地址不合格时返回 false，什么都不改 */
+    fun setSource(context: Context, choice: String, custom: String? = null): Boolean {
+        require(Sources.CHOICES.any { it.first == choice })
+        val edit = Settings.prefs(context).edit().putString("update_source", choice)
+        if (custom != null) {
+            val checked = if (custom.isBlank()) "" else Sources.customChecked(custom) ?: return false
+            edit.putString("update_mirror", checked)
+        }
+        edit.apply()
+        return true
+    }
+
+    fun sources(context: Context): List<Source> = Sources.list(sourceChoice(context), customMirror(context))
+
     fun lastCheckAt(context: Context): Long = Settings.prefs(context).getLong("update_checked_at", 0L)
 
     /** 打开应用 / 服务运行时调用：到时间了才检查（手动模式从不自己检查） */
@@ -98,7 +121,7 @@ object AppUpdater {
         state = State(
             phase = if (Versions.isNewer(latest, BuildConfig.VERSION_NAME)) Phase.AVAILABLE else Phase.IDLE,
             latest = latest, checkedAt = p.getLong("update_checked_at", 0L), pageUrl = p.getString("update_page", null),
-            message = p.getString("update_error", null),
+            message = p.getString("update_error", null), source = p.getString("update_from", null),
         )
     }
 
@@ -139,16 +162,19 @@ object AppUpdater {
     internal fun runCheck(context: Context, userAsked: Boolean, install: Boolean = false) {
         val mode = mode(context)
         state = state.copy(phase = Phase.CHECKING, message = null, progress = -1)
+        val releases = source(context)
         val release = try {
-            source().latest()
+            releases.latest()
         } catch (e: Exception) {
             fail(context, e.message ?: "检查更新失败", userAsked)
             return
         }
         val now = System.currentTimeMillis()
         Settings.prefs(context).edit().putLong("update_checked_at", now).putString("update_latest", release.version)
-            .putString("update_page", release.pageUrl).remove("update_error").apply()
-        state = State(phase = Phase.IDLE, latest = release.version, checkedAt = now, pageUrl = release.pageUrl)
+            .putString("update_page", release.pageUrl).putString("update_from", release.source.label)
+            .remove("update_error").apply()
+        state = State(phase = Phase.IDLE, latest = release.version, checkedAt = now, pageUrl = release.pageUrl,
+            source = release.source.label)
         if (!Versions.isNewer(release.version, BuildConfig.VERSION_NAME)) {
             state = state.copy(message = "已经是最新版本")
             return
@@ -161,7 +187,7 @@ object AppUpdater {
         val file = File(File(context.cacheDir, "updates").apply { mkdirs() }, "violet-mcp-${release.version}.apk")
         try {
             state = state.copy(phase = Phase.DOWNLOADING, progress = 0, message = "正在下载 ${release.version}")
-            source().download(release, file) { read, total ->
+            releases.download(release, file) { read, total ->
                 if (total > 0) state = state.copy(progress = (read * 100 / total).toInt())
             }
             verifyApk(context, file, release.version)?.let { problem ->
@@ -332,7 +358,7 @@ object AppUpdater {
     /** 仅测试用 */
     internal fun resetForTest() {
         state = State()
-        source = { UpdateChecker() }
+        source = { ctx -> UpdateChecker(sources = sources(ctx)) }
         installer = { ctx, file -> commitInstall(ctx, file) }
     }
 }

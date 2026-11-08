@@ -25,7 +25,7 @@ Baseado no [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), com esta
 - **Adicionado**: ferramentas somente leitura que percebem o estado do celular.
 - **Substituído**: o túnel original em texto puro virou um relay TLS no seu próprio VPS, ao qual o celular se conecta.
 
-Versão atual: app **Violet MCP 1.4.3** (pacote `com.mcp.server.violet`), relay **violet-mcp-relay 1.2.0**.
+Versão atual: app **Violet MCP 1.4.4** (pacote `com.mcp.server.violet`), relay **violet-mcp-relay 1.2.0**.
 
 Por enquanto, a interface do app está em chinês.
 
@@ -54,7 +54,8 @@ Por enquanto, a interface do app está em chinês.
   - O serviço tem três estados: rodando, restrito e parado. Se você parar manualmente, ele não volta sozinho.
 - **Atualizações pelo app**:
   - Configurações → Atualizações do app: escolha "automática" (padrão), "só avisar" ou "verificar manualmente".
-  - Baixa apenas das GitHub Releases deste repositório e depois confere `SHA256SUMS.txt`, o nome do pacote, o número da versão e o certificado de assinatura; se algo não bater, nada é instalado.
+  - Baixa das GitHub Releases deste repositório. Desde a 1.4.4 dá para escolher a origem do download: Automático por padrão (primeiro o GitHub, depois o espelho do GitHub p.jackyu.cn), só GitHub, só p.jackyu.cn ou o endereço https do seu próprio espelho.
+  - Depois de baixar, confere `SHA256SUMS.txt`, o nome do pacote, o número da versão e o certificado de assinatura; se algo não bater, nada é instalado.
   - Na primeira vez, é preciso permitir que este app "instale apps desconhecidos" nas configurações do sistema.
 - **Sem root, sem permissão de acessibilidade.**
 

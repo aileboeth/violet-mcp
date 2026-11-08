@@ -33,8 +33,8 @@ android {
         applicationId = "com.mcp.server.violet"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.4.3"
+        versionCode = 11
+        versionName = "1.4.4"
     }
 
     signingConfigs {

@@ -25,7 +25,7 @@ Basado en [Cazriel/mcp-server](https://github.com/Cazriel/mcp-server), con estos
 - **Se añade**: herramientas de solo lectura que perciben el estado del teléfono.
 - **Se sustituye**: el túnel original en texto plano pasa a ser un relé TLS en tu propio VPS al que se conecta el teléfono.
 
-Versión actual: app **Violet MCP 1.4.3** (paquete `com.mcp.server.violet`), relé **violet-mcp-relay 1.2.0**.
+Versión actual: app **Violet MCP 1.4.4** (paquete `com.mcp.server.violet`), relé **violet-mcp-relay 1.2.0**.
 
 Por ahora, la interfaz de la app está en chino.
 
@@ -54,7 +54,8 @@ Por ahora, la interfaz de la app está en chino.
   - El servicio tiene tres estados: en marcha, restringido y detenido. Si lo detienes a mano, no se vuelve a iniciar solo.
 - **Actualizaciones desde la app**:
   - Ajustes → Actualizaciones de la app: elige "automática" (por defecto), "solo avisar" o "comprobar manualmente".
-  - Solo descarga desde las GitHub Releases de este repositorio y luego comprueba `SHA256SUMS.txt`, el nombre del paquete, el número de versión y el certificado de firma; si algo no cuadra, no instala nada.
+  - Descarga desde las GitHub Releases de este repositorio. Desde la 1.4.4 puedes elegir el origen de descarga: Automático por defecto (primero GitHub y después el espejo de GitHub p.jackyu.cn), solo GitHub, solo p.jackyu.cn o la dirección https de tu propio espejo.
+  - Después de descargar comprueba `SHA256SUMS.txt`, el nombre del paquete, el número de versión y el certificado de firma; si algo no cuadra, no instala nada.
   - La primera vez tienes que permitir que esta app "instale apps desconocidas" en los ajustes del sistema.
 - **Sin root ni permisos de accesibilidad.**
 
